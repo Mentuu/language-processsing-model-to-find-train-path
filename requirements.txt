@@ -1,0 +1,6 @@
+numpy == 2.1
+wavio == 0.0.9
+scipy == 1.14.1
+faster-whisper == 1.0.3
+sounddevice
+pynput
