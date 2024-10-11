@@ -1,0 +1,7 @@
+﻿sentence,label
+"""Je vais à Paris depuis Strasbourg en passant par Metz.""",1
+"""Je voudrais un billet de train pour Lyon depuis Marseille.""",1
+"""Je vais à Paris depuis Strasbourg en passant par Metz en hélicoptère.""",0
+"""Quelle est la météo à Nice aujourd'hui?""",0
+"""Réserve un vol pour New York depuis Paris.""",0
+"""Je prends le train de Lille à Bordeaux.""",1
