@@ -49,6 +49,7 @@ def checkValidity(sentence):
     outputs = model(**inputs)
     probs = outputs.logits.softmax(dim=1)
     predicted_class = probs.argmax().item()
+    print("Predicted class:", predicted_class)
     return 1 if predicted_class == 1 else 0
 
 def on_press(key):
