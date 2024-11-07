@@ -1,14 +1,8 @@
-import sys
-
-from scipy.io.wavfile import write
 import numpy as np
 import threading
 from faster_whisper import WhisperModel
 import sounddevice as sd
 from pynput import keyboard
-import spacy
-nlp = spacy.load("fr_core_news_lg")
-from spacy.matcher import Matcher
 
 freq = 44100
 recording = []
@@ -73,17 +67,5 @@ def main():
     for segment in segments:
         result += segment.text
     print(result)
-    print("Start the natural language processing")
-
-    doc = nlp(result)
-    gpe = []
-    locations = []
-    for ent in doc.ents:
-        print(ent.text, ent.label_)
-        if ent.label_ in ['GPE','LOC']:
-            locations.append(ent.text)
-    actions = [token.text for token in doc if token.pos_ == "VERB" and token.dep_ == "ROOT"]
-    print(locations)
-    print("Actions:", actions)
 
 main()
