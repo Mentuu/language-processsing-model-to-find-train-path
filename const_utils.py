@@ -6,7 +6,7 @@ movement_verbs = [
 
 invalid_transports = [
     "bus", "hélicoptère", "vol spatial", "moto sous-marine", "vélo", "trottinette", 
-    "montgolfière", "fusée", "chameau", "sous-marin", "patins à roulettes", "ferry"
+    "montgolfière", "fusée", "chameau", "sous-marin", "patins à roulettes", "ferry", "bateau",
 ]
 
 expressions_depart = [
@@ -20,7 +20,7 @@ expressions_depart = [
     "je fais mes premiers pas depuis", "je mets les voiles de",
     "je décolle depuis", "je démarre mon chemin à", "je commence mon voyage à",
     "je prends le départ à", "je débute à l'endroit de", "je me lance de",
-    "je quitte le point de", "je suis en départ de", "mon périple commence à","je suis actuellement à","je suis à", "je suis actuellement à" 
+    "je quitte le point de", "je suis en départ de", "mon périple commence à","je suis actuellement à","je suis à", "je suis actuellement à" , "de"
 ]
 
 expressions_arrivee = [
