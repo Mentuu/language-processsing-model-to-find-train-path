@@ -3,6 +3,7 @@ import spacy
 import csv
 import fct_utils
 from spacy.matcher import Matcher
+import pandas as pd
 
 spacy.prefer_gpu()
 nlp = spacy.load('fr_core_news_lg')
@@ -12,20 +13,50 @@ sncf_dataset = 'liste-des-gares.csv'
 communes_set = set()
 commune_to_stations = {}
 
-from spacy.matcher import Matcher
+# Load the dataset
+df = pd.read_csv('dataset.csv')
+
+# Keep relevant columns
+df = df[['Sentence', 'Departure City', 'Arrival City', 'Trip Validity']]
+
+# Convert 'Trip Validity' to numerical labels
+df['Validity Label'] = df['Trip Validity'].map({'VALID_TRIP': 1, 'INVALID_TRIP': 0})
+
+# Drop rows with missing values or invalid labels
+df = df.dropna(subset=['Sentence', 'Validity Label'])
+
 
 matcher = Matcher(nlp.vocab)
-pattern_departure = [
-    {'LOWER': {'IN': ['de', 'depuis']}},
-    {'ENT_TYPE': 'LOC', 'OP': '+'}
-]
-matcher.add('DEPARTURE_PATTERN', [pattern_departure])
+pattern_trip = [
+    # Sujet (optionnel)
+    {'POS': 'PRON', 'OP': '?'},
 
-pattern_arrival = [
-    {'LOWER': {'IN': ['à', 'vers']}},
-    {'ENT_TYPE': 'LOC', 'OP': '+'}
+    # Verbe de départ
+    {'LEMMA': {'IN': ['quitter', 'partir', 'prendre', 'laisser', 'sortir']}, 'POS': 'VERB'},
+
+    # Préposition de départ (optionnelle)
+    {'LOWER': {'IN': ['de', 'depuis']}, 'OP': '?'},
+
+    # Ville de départ
+    {'ENT_TYPE': 'LOC', 'OP': '+'},
+
+    # Préposition de destination
+    {'LOWER': {'IN': ['pour', 'afin de', 'vers']}, 'OP': '?'},
+
+    # Verbe de mouvement ou d'intention (optionnel)
+    {'LEMMA': {'IN': ['aller', 'rejoindre', 'rendre', 'visiter']}, 'OP': '*'},
+
+    # Préposition avant la ville d'arrivée (optionnelle)
+    {'LOWER': {'IN': ['à', 'vers']}, 'OP': '?'},
+
+    # Ville d'arrivée
+    {'ENT_TYPE': 'LOC', 'OP': '+'},
+
+    # Mots supplémentaires (optionnels)
+    {'OP': '*'},
 ]
-matcher.add('ARRIVAL_PATTERN', [pattern_arrival])
+
+matcher.add('TRIP_PATTERN', [pattern_trip])
 
 
 ########################################## map des communes aux gares depuis le csv sncf ###############
@@ -52,73 +83,98 @@ with open(sncf_dataset, 'r', encoding='utf-8') as sncf_file:
 
 def extraire_lieux(phrase):
     doc = nlp(phrase)
-    lieu_depart = None
-    lieu_arrivee = None
-    lieux_intermediaires = []
-    
-    # Initialize variables to keep track of matched cities
-    departure_cities = []
-    arrival_cities = []
-    
-    # Use Matcher to find patterns
+    verbe = []
+
+    # Utiliser le Matcher pour trouver les motifs
     matches = matcher(doc)
     
-    # Sort matches by their position in the text
+    # Trier les correspondances par leur position dans le texte
     matches = sorted(matches, key=lambda x: x[1])
     
+    # Liste pour stocker les villes avec leur contexte
+    cities_with_context = []
+
     for match_id, start, end in matches:
         span = doc[start:end]
         match_label = nlp.vocab.strings[match_id]
         
-        # Collect city tokens (can be multi-word)
-        city_tokens = []
-        for token in span:
-            if token.ent_type_ in ["LOC", "GPE"]:
-                city_tokens.append(token.text)
-            elif city_tokens and token.pos_ == "PROPN":
-                # Include proper nouns following the city name (e.g., 'New York')
-                city_tokens.append(token.text)
-            else:
-                # Stop collecting if the token is not part of the city name
-                break
-        city_name = ' '.join(city_tokens)
-        
-        # Assign cities based on the pattern matched
-        if match_label == 'DEPARTURE_PATTERN' and city_name:
+        if match_label == 'TRIP_PATTERN':
+            # Initialiser le contexte
+            current_context = None
+            tokens = span
+            for token in tokens:
+                # Collecter les verbes
+                if token.pos_ in ["VERB", "AUX"]:
+                    verbe.append(token.lemma_)
+                
+                # Identifier les prépositions et ajuster le contexte
+                if token.lower_ in ['de', 'depuis']:
+                    current_context = 'DEPARTURE'
+                elif token.lower_ in ['à', 'vers', 'jusqu\'à', 'pour', 'afin de']:
+                    current_context = 'ARRIVAL'
+                elif token.lower_ in ['en', 'passant', 'par', 'via']:
+                    current_context = 'INTERMEDIATE'
+                
+                # Extraire les villes avec leur contexte
+                if token.ent_type_ in ["LOC", "GPE"]:
+                    city_name = token.text
+                    cities_with_context.append((city_name, current_context))
+                    # Réinitialiser le contexte après avoir assigné le lieu
+                    current_context = None
+
+    # Traitement des villes collectées
+    lieu_depart = None
+    lieu_arrivee = None
+    lieux_intermediaires = []
+
+    for city_name, context in cities_with_context:
+        if context == 'DEPARTURE' and not lieu_depart:
+            lieu_depart = city_name
+        elif context == 'ARRIVAL':
+            lieu_arrivee = city_name
+        elif context == 'INTERMEDIATE':
+            lieux_intermediaires.append(city_name)
+        else:
+            # Si le contexte est None
             if not lieu_depart:
                 lieu_depart = city_name
-        elif match_label == 'ARRIVAL_PATTERN' and city_name:
-            if not lieu_arrivee:
+            elif not lieu_arrivee:
                 lieu_arrivee = city_name
+            else:
+                lieux_intermediaires.append(city_name)
+                
+    # Si aucun lieu n'a été trouvé par le Matcher, utiliser les entités
+    if not lieu_depart or not lieu_arrivee:
+        # Extraire les entités de type lieu
+        entities = [ent.text for ent in doc.ents if ent.label_ in ["LOC", "GPE"]]
+        if entities:
+            if not lieu_depart:
+                lieu_depart = entities[0]
+            if not lieu_arrivee and len(entities) > 1:
+                lieu_arrivee = entities[-1]
+            # Les lieux intermédiaires sont les entités entre départ et arrivée
+            lieux_intermediaires = entities[1:-1]
     
-    # If Matcher didn't find cities, fall back to entities
-    entities = [(ent.text, ent.start_char, ent.label_) for ent in doc.ents if ent.label_ in ["LOC", "GPE"]]
-    entities_text = [ent[0] for ent in entities]
-    
-    # Assign departure and arrival if still None
-    if not lieu_depart and entities:
-        lieu_depart = entities[0][0]
-    if not lieu_arrivee and len(entities) > 1:
-        lieu_arrivee = entities[-1][0]
-    
-    # Remove assigned cities from intermediate locations
-    assigned_cities = set(filter(None, [lieu_depart, lieu_arrivee]))
-    lieux_intermediaires = [fct_utils.normalize_str(city) for city in entities_text if fct_utils.normalize_str(city) not in assigned_cities]
-    
-    # Normalize extracted cities
+    # Normaliser les noms de villes
     lieu_depart = fct_utils.normalize_str(lieu_depart) if lieu_depart else None
     lieu_arrivee = fct_utils.normalize_str(lieu_arrivee) if lieu_arrivee else None
-    
-    # Validate cities against communes_set
+    lieux_intermediaires = [fct_utils.normalize_str(city) for city in lieux_intermediaires]
+
+    # Valider les villes contre le set de communes
     if lieu_depart and lieu_depart not in communes_set:
         lieu_depart = None
     if lieu_arrivee and lieu_arrivee not in communes_set:
         lieu_arrivee = None
-    
-    verbe = [token.text for token in doc if token.pos_ in ["VERB", "AUX"]]
-    
-    return verbe, lieu_depart, lieu_arrivee, lieux_intermediaires
+    lieux_intermediaires = [city for city in lieux_intermediaires if city in communes_set]
 
+    # Enlever les lieux déjà assignés des lieux intermédiaires
+    assigned_cities = set(filter(None, [lieu_depart, lieu_arrivee]))
+    lieux_intermediaires = [city for city in lieux_intermediaires if city not in assigned_cities]
+
+    # Supprimer les doublons dans les verbes
+    verbe = list(set(verbe))
+
+    return verbe, lieu_depart, lieu_arrivee, lieux_intermediaires
 
 def est_voyage_valide(phrase, lieu_depart, lieu_arrivee):
     # Check if both departure and arrival cities are valid
@@ -213,7 +269,7 @@ with open(dataset, 'r', encoding='utf-8') as csvfile:
             correct_validity += 1
 
         # Display the results for debugging
-        if validite_predite != validite_attendue:
+        if ((validite_predite != validite_attendue and validite_attendue != 'INVALID_TRIP') or (lieu_depart != ville_depart_attendue and lieu_depart in communes_set) or (lieu_arrivee != ville_arrivee_attendue)):
             print(f"Phrase: {phrase}")
             print(f"Verbes trouvés : {verbe}")
             print(f"Lieu de départ détecté : {lieu_depart} (Attendu : {ville_depart_attendue})")
