@@ -3,8 +3,8 @@ import random
 import re
 import json
 
-nb_phrases = 2500
-nb_phrases_test = 500 
+nb_phrases = 1000
+nb_phrases_test = 500
 
 #delete file
 import os

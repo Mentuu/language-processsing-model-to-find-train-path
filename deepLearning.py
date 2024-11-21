@@ -13,6 +13,9 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 from scipy.special import expit  # Sigmoid function
+from sklearn.utils.class_weight import compute_class_weight
+import numpy as np
+
 
 # Load valid and invalid phrases
 valid_phrases = pd.read_csv('good_phrases.csv')
@@ -48,8 +51,9 @@ data = pd.concat([valid_phrases, invalid_phrases], ignore_index=True)
 # Select only the 'Sentence' and 'label' columns
 data = data[['Sentence', 'Trip Validity']]
 
-tokenizer = AutoTokenizer.from_pretrained('camembert-base')
-# tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+# Loading the tokenizer
+# tokenizer = AutoTokenizer.from_pretrained('camembert-base')
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 # Tokenization function
 def tokenize(batch):
@@ -73,6 +77,7 @@ train_texts, val_texts, train_labels, val_labels = train_test_split(
     random_state=42
 )
 
+
 # Tokenize the datasets
 train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128)
 val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=128)
@@ -81,9 +86,22 @@ val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=1
 train_dataset = PhraseDataset(train_encodings, train_labels)
 val_dataset = PhraseDataset(val_encodings, val_labels)
 
-# model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
-model = AutoModelForSequenceClassification.from_pretrained('camembert-base')
+class_weights = compute_class_weight(
+    class_weight='balanced',
+    classes=np.unique(train_labels),
+    y=train_labels
+)
+
+# Loading model
+model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
+# model = AutoModelForSequenceClassification.from_pretrained(
+#     'camembert-base',
+#     num_labels=2
+#     )
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+class_weights = torch.tensor(class_weights, dtype=torch.float)
+class_weights =  class_weights.to(device)
 model = model.to(device)
 
 training_args = TrainingArguments(
@@ -91,10 +109,11 @@ training_args = TrainingArguments(
     num_train_epochs=3,              # Number of epochs
     per_device_train_batch_size=16,  # Batch size per device
     per_device_eval_batch_size=16,   # Batch size for evaluation
-    evaluation_strategy='epoch',     # Evaluate at the end of each epoch
+    eval_strategy='epoch',
+    save_strategy='epoch',     # Evaluate at the end of each epoch
     logging_dir='./logs',            # Log directory
-    save_steps=500,                  # Save model every 500 steps
-    logging_steps=50,                # Log every 50 steps
+    load_best_model_at_end=True,     # Load the best model when finished
+    save_total_limit=2,              # Only keep one best model
 )
 
 trainer = Trainer(
@@ -115,12 +134,25 @@ test_texts = test_phrases['Sentence'].tolist()
 test_labels = test_phrases['Trip Validity'].tolist()
 test_encodings = tokenizer(test_texts, truncation=True, padding=True, max_length=128)
 
-# Create test dataset
-######## Saving the model
+######## debugging ################
+print('balancing :',data['Trip Validity'].value_counts())
+train_sentences = set(train_texts)
+test_sentences = set(test_texts)
+overlap = train_sentences.intersection(test_sentences)
+print(f"Number of overlapping sentences: {len(overlap)}")
+######## debugging ################
+
+
+
+######## Saving the model ################
 model.save_pretrained('./target/fine-tuned-bert')
 tokenizer.save_pretrained('./target/fine-tuned-bert')
 test_dataset = PhraseDataset(test_encodings, test_labels)  # Labels are placeholders
+######## Saving the model ################
 
+
+
+######## testing the model ###############
 # After getting predictions from the model
 predictions = trainer.predict(test_dataset)
 pred_labels = predictions.predictions.argmax(-1)  # Predicted class labels
@@ -154,6 +186,8 @@ plt.show()
 
 # Add predictions to the DataFrame
 test_phrases['Predicted Label'] = pred_labels
+######## testing the model ###############
+
 
 
 
