@@ -4,6 +4,19 @@ import csv
 import fct_utils
 from spacy.matcher import Matcher
 import pandas as pd
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
+
+# Specify the path where your model and tokenizer are saved
+model_path = './target/fine-tuned-bert'
+
+# Load the tokenizer and model
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = AutoModelForSequenceClassification.from_pretrained(model_path)
+
+# Move the model to the appropriate device (GPU or CPU)
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+model = model.to(device)
 
 spacy.prefer_gpu()
 nlp = spacy.load('fr_core_news_lg')
@@ -212,6 +225,33 @@ def est_voyage_valide(phrase, lieu_depart, lieu_arrivee):
     
     return "VALID_TRIP"
 
+def est_voyage_valide2(phrase):
+    # Tokenize the input phrase
+    inputs = tokenizer(
+        phrase,
+        return_tensors='pt',
+        truncation=True,
+        padding=True,
+        max_length=128  # Should match the max_length used during training
+    )
+    # Move inputs to the same device as the model
+    inputs = {key: value.to(device) for key, value in inputs.items()}
+
+    # Get predictions from the model without computing gradients
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    # Get the predicted class index (0 or 1)
+    logits = outputs.logits
+    predicted_class_id = logits.argmax(-1).item()
+
+    # Map class indices to labels
+    class_labels = ['Invalid', 'Valid']  # Adjust if your labels are different
+    predicted_label = class_labels[predicted_class_id]
+    if predicted_label == 'Invalid':
+        return 0
+    else:
+        return 1
 
 # Processing the utils.dataset
 total_phrases = 0
@@ -262,14 +302,13 @@ with open(dataset, 'r', encoding='utf-8') as csvfile:
             arrival_stations = None
 
         # Validate the mode of transport
-        validite_predite = est_voyage_valide(phrase, lieu_depart, lieu_arrivee)
-    
+        # validite_predite = est_voyage_valide(phrase, lieu_depart, lieu_arrivee)
+        validite_predite = str(est_voyage_valide2(phrase))
         # Check correctness
         if validite_predite == validite_attendue:
             correct_validity += 1
-
         # Display the results for debugging
-        if ((validite_predite != validite_attendue and validite_attendue != 'INVALID_TRIP') or (lieu_depart != ville_depart_attendue and lieu_depart in communes_set) or (lieu_arrivee != ville_arrivee_attendue)):
+        if ((validite_predite != validite_attendue) or (lieu_depart != ville_depart_attendue and lieu_depart in communes_set) or (lieu_arrivee != ville_arrivee_attendue)):
             print(f"Phrase: {phrase}")
             print(f"Verbes trouvés : {verbe}")
             print(f"Lieu de départ détecté : {lieu_depart} (Attendu : {ville_depart_attendue})")

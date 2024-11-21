@@ -12,12 +12,12 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 import matplotlib.pyplot as plt
+from scipy.special import expit  # Sigmoid function
 
 # Load valid and invalid phrases
 valid_phrases = pd.read_csv('good_phrases.csv')
 invalid_phrases = pd.read_csv('wrong_phrases.csv')
 test_phrases = pd.read_csv('test_phrases.csv')
-# eval_phrases = pd.read_csv('eval_phrases.csv')
 
 def compute_metrics(pred):
     labels = pred.label_ids
@@ -39,14 +39,14 @@ def compute_metrics(pred):
     }
 
 # Combine and label the data
-valid_phrases['label'] = 1  # Valid phrases labeled as 1
-invalid_phrases['label'] = 0  # Invalid phrases labeled as 0
+valid_phrases['Trip Validity'] = 1  # Valid phrases labeled as 1
+invalid_phrases['Trip Validity'] = 0  # Invalid phrases labeled as 0
 
 # Combine datasets
 data = pd.concat([valid_phrases, invalid_phrases], ignore_index=True)
 
 # Select only the 'Sentence' and 'label' columns
-data = data[['Sentence', 'label']]
+data = data[['Sentence', 'Trip Validity']]
 
 tokenizer = AutoTokenizer.from_pretrained('camembert-base')
 # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -68,7 +68,7 @@ class PhraseDataset(torch.utils.data.Dataset):
 
 train_texts, val_texts, train_labels, val_labels = train_test_split(
     data['Sentence'].tolist(),
-    data['label'].tolist(),
+    data['Trip Validity'].tolist(),
     test_size=0.2,
     random_state=42
 )
@@ -110,29 +110,28 @@ trainer.train()
 trainer.evaluate()
 
 
-# Load test phrases
-test_phrases = pd.read_csv('test_phrases.csv')
-
 # Tokenize test phrases
 test_texts = test_phrases['Sentence'].tolist()
+test_labels = test_phrases['Trip Validity'].tolist()
 test_encodings = tokenizer(test_texts, truncation=True, padding=True, max_length=128)
 
 # Create test dataset
-test_dataset = PhraseDataset(test_encodings, [0]*len(test_texts))  # Labels are placeholders
-
-predictions = trainer.predict(test_dataset)
-pred_labels = predictions.predictions.argmax(-1)
-
 ######## Saving the model
-# model.save_pretrained('./target/fine-tuned-bert')
-# tokenizer.save_pretrained('./target/fine-tuned-bert')
+model.save_pretrained('./target/fine-tuned-bert')
+tokenizer.save_pretrained('./target/fine-tuned-bert')
+test_dataset = PhraseDataset(test_encodings, test_labels)  # Labels are placeholders
 
-######## Results !! for the test phrases
-labels = predictions.label_ids
-report = classification_report(labels, predictions, target_names=['Invalid', 'Valid'])
+# After getting predictions from the model
+predictions = trainer.predict(test_dataset)
+pred_labels = predictions.predictions.argmax(-1)  # Predicted class labels
+labels = predictions.label_ids  # True labels
+
+# Generate classification report
+report = classification_report(labels, pred_labels, target_names=['Invalid', 'Valid'])
 print(report)
-## confusion matrix
-cm = confusion_matrix(labels, predictions)
+
+# Compute confusion matrix
+cm = confusion_matrix(labels, pred_labels)
 disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['Invalid', 'Valid'])
 disp.plot(cmap=plt.cm.Blues)
 plt.title('Confusion Matrix')

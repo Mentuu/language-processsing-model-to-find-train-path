@@ -3,6 +3,9 @@ import random
 import re
 import json
 
+nb_phrases = 2500
+nb_phrases_test = 500 
+
 #delete file
 import os
 if os.path.exists("good_phrases.csv"):
@@ -82,6 +85,11 @@ phrases = [
     'je voudrais aller à {departure} puis à {transit} et enfin à {arrival} en passant par {transit}',
     'je voudrais aller à {departure} puis à {transit} et enfin à {arrival} via {transit}',
     'je veux aller à {arrival} en passant par {transit} et {transit} depuis {departure}',
+    'Je cherche un itinéraire pour aller de {departure} à {arrival} {mode}.',
+    'Y a-t-il des trains partant de {departure} vers {arrival} {time}?',
+    'Je dois être à {arrival} en partant de {departure}, pouvez-vous m\'aider?',
+    'Comment puis-je me rendre de {departure} à {arrival} {time}?',
+    'Est-il possible de visiter {transit} en route vers {arrival} depuis {departure}?',
 ]
 
 wrong_phrases = [
@@ -129,7 +137,10 @@ wrong_phrases = [
     'Le festival à {arrival} est-il toujours prévu ce week-end ?',
     'Y a-t-il des vols disponibles de {departure} à {arrival} {time} ?',
     'Quel temps fait-il à {arrival} aujourd\'hui ?',
-    'Pourriez-vous vérifier les prévisions météo pour {arrival} ?'
+    'Pourriez-vous vérifier les prévisions météo pour {arrival} ?',
+    'Je veux me rendre de {departure} à {arrival} en {mode}, est-ce possible?',
+    'Existe-t-il un vol en fusée de {departure} à {arrival}?',
+    'Puis-je aller à {arrival} depuis {departure} à dos de chameau?',
 ]
 
 test_phrases = [
@@ -153,6 +164,10 @@ test_phrases = [
     "Je cherche les horaires de {mode} de {departure} à {arrival}.",
     "Pouvez-vous suggérer un itinéraire de voyage de {departure} à {arrival} ?",
     "Le festival à {arrival} est-il toujours prévu ce week-end ?"
+    "l'école est à {arrival}",
+    'je veux paris et je veux strasbourg',
+    'quels est le meilleure restaurant à {arrival}',
+    ''
     ]
 
 
@@ -163,7 +178,7 @@ with open('good_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
     writer.writeheader()
 
     # Generate 50 phrases
-    for _ in range(7500):
+    for _ in range(nb_phrases):
         phrase_template = random.choice(phrases)
         departure_city = random.choice(cities)
 
@@ -224,7 +239,7 @@ with open('wrong_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
     # Invalid trip: Use international cities or invalid modes
-    for _ in range(7500):
+    for _ in range(nb_phrases):
         phrase_template = random.choice(wrong_phrases)
         # Find placeholders in the phrase template
         placeholders = re.findall(r'{(.*?)}', phrase_template)
@@ -289,7 +304,7 @@ with open('test_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
     fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'transit cities', 'Trip Validity']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
-    for _ in range(3000):
+    for _ in range(nb_phrases_test):
         choice = random.choice([0, 1])
         data = {}
         if choice == 0:
