@@ -2,43 +2,62 @@ import csv
 import random
 import re
 import json
-
-nb_phrases = 1000
-nb_phrases_test = 500
-
-#delete file
 import os
-if os.path.exists("good_phrases.csv"):
-    os.remove("good_phrases.csv")
-if os.path.exists("wrong_phrases.csv"):
-    os.remove("wrong_phrases.csv")
+
+nb_phrases = 10000
+nb_phrases_test = 1500
+
+# Supprimer les fichiers existants
+if os.path.exists("phrases.csv"):
+    os.remove("phrases.csv")
 if os.path.exists("test_phrases.csv"):
     os.remove("test_phrases.csv")
 
-#import json
+# Importer les villes françaises depuis le fichier JSON
 with open('cities.json') as f:
     file = json.load(f)
-    cities = []   
-    for city in file:
-        cities.append(city['COMMUNE'])
-# Define lists of cities and modes of transport
+    cities = [city['COMMUNE'] for city in file]
 
+# Ajouter les villes internationales à la liste des villes
 international_cities = [
     'New York', 'Tokyo', 'Berlin', 'Amsterdam', 'Bruxelles', 'Genève', 'Lisbonne',
     'Madrid', 'Rome', 'Prague', 'Vienne', 'Copenhague', 'Oslo', 'Stockholm',
     'Helsinki', 'Dublin', 'Athènes', 'Moscou', 'Le Caire', 'Sydney', 'Pékin'
 ]
+cities.extend(international_cities)
 
-valid_modes = ['en train']
-invalid_modes = [
-    'en trottinette', 'en fusée', 'à dos de chameau', 'en sous-marin', 'en hélicoptère',
-    'en montgolfière', 'en moto sous-marine', 'en voiture', 'en vélo', 'en bus', 'en ferry', 'à moto'
-]
-
+# Définir les modes de transport et les temps
+modes = ['en train', 'en voiture', 'en bus', 'en avion', 'en bateau', 'à pied', 'à vélo', 'en métro']
 times = ['demain matin', 'cet après-midi', 'ce soir', 'la semaine prochaine', 'aujourd\'hui']
 
-# Phrase templates with placeholders
-phrases = [
+# Définir des synonymes pour diversifier les phrases
+synonyms = {
+    'aller': ['se rendre', 'partir pour', 'visiter', 'rejoindre'],
+    'partir': ['quitter', 'démarrer de', 's\'éloigner de'],
+    'voyager': ['se déplacer', 'faire un voyage', 'parcourir'],
+    'prendre': ['emprunter', 'monter dans', 'utiliser'],
+    'train': ['TGV', 'TER', 'wagon'],
+    'avion': ['vol', 'appareil', 'aéronef'],
+    'voiture': ['automobile', 'véhicule', 'bagnole'],
+    'bus': ['autocar', 'car'],
+    'bateau': ['navire', 'vaisseau', 'ferry'],
+    'aujourd\'hui': ['ce jour', 'en ce moment'],
+    'demain matin': ['le matin prochain', 'à l\'aube'],
+    'cet après-midi': ['cette après-midi', 'dans l\'après-midi'],
+    'je': ['moi', 'pour ma part'],
+    'vous': ['tu', 'te'],
+    'réunion': ['rendez-vous', 'entretien', 'meeting'],
+    'itinéraire': ['route', 'trajet', 'chemin'],
+    'trajet': ['voyage', 'parcours', 'déplacement'],
+    'besoin': ['nécessité', 'envie', 'souhait'],
+    'meilleur': ['optimal', 'idéal', 'parfait'],
+    'horaires': ['heures', 'planning', 'agenda'],
+    'pouvez-vous': ['peux-tu', 'est-il possible de'],
+    'suggestion': ['proposition', 'idée', 'conseil'],
+}
+
+# Phrases qui représentent des trajets (trip)
+trip_phrases = [
     'Je pars de {departure} pour aller à {arrival} {time}.',
     'Je vais de {departure} à {arrival} {mode}.',
     'Je quitte {departure} pour me rendre à {arrival} {time}.',
@@ -49,7 +68,6 @@ phrases = [
     'Je vais à {arrival} en partant de {departure} {time}.',
     'Je suis à {departure} et je veux prendre un vol pour {arrival}.',
     'Je voudrais un billet de train pour {arrival} depuis {departure}.',
-    'Je suis à {departure} il fait quel temps à {arrival}.',
     'Après mon départ de {departure}, je voyagerai vers {arrival}.',
     'Mon voyage commencera à {departure} et se terminera à {arrival}.',
     'Je dois quitter {departure} afin de rejoindre {arrival} pour une réunion.',
@@ -60,341 +78,147 @@ phrases = [
     'Je vais de {departure} à {arrival} en passant par {transit}.',
     'Je voyage de {departure} à {arrival} en passant par {transit}.',
     'Je m\'apprête à quitter {departure} pour rejoindre {arrival}.',
-    'Quelle est la météo à {arrival} aujourd\'hui?',
     'Je prends le train de {departure} à {arrival}.',
     'Je vais de {departure} à {arrival} en train, quel est le prix du billet?',
     'Je pars de {departure} pour aller à {arrival} {time} en train.',
     'Je vais à {arrival} en partant de {departure} {time} en train.',
     'Je suis à {departure} et je veux aller à {arrival} en train.',
-    'je suis strasbourgeois et je vais à {arrival} {time} en train.',
-    'je vais à {arrival} {time} en train depuis {departure}, quel est la météo de {arrival}?',
-    'je veux aller à {arrival} {time}',
-    'je veux aller à {arrival} {time} en passant par {transit}',
-    'je veux rejoindre {arrival} {time}',
-    'je veux rejoindre {arrival} {time} en passant par {transit}',
-    'en passant par {transit} je veux aller à {arrival} {time}',
-    'en passant par {transit} je veux rejoindre {arrival} {time}',
-    'en faisant un détour par {transit} je veux aller à {arrival} {time}',
-    'en faisant un détour par {transit} je veux rejoindre {arrival} {time}',
-    'Je prévois un trajet de {departure} à {arrival} via {transit}.',
+    'Je prévois un trajet de {departure} à {arrival} via {transits}.',
     'Je cherche les horaires de {mode} de {departure} à {arrival}.',
     'Pouvez-vous suggérer un itinéraire de voyage de {departure} à {arrival} ?',
     'Veuillez me trouver le meilleur itinéraire de {departure} à {arrival}.',
     'J\'ai besoin de rejoindre {arrival} depuis {departure} pour un événement.',
     'Existe-t-il un train direct entre {departure} et {arrival} ?',
-    'je voudrais aller à {departure} puis à {transit} et enfin à {arrival} en passant par {transit}',
-    'je voudrais aller à {departure} puis à {transit} et enfin à {arrival} via {transit}',
-    'je veux aller à {arrival} en passant par {transit} et {transit} depuis {departure}',
     'Je cherche un itinéraire pour aller de {departure} à {arrival} {mode}.',
     'Y a-t-il des trains partant de {departure} vers {arrival} {time}?',
     'Je dois être à {arrival} en partant de {departure}, pouvez-vous m\'aider?',
     'Comment puis-je me rendre de {departure} à {arrival} {time}?',
-    'Est-il possible de visiter {transit} en route vers {arrival} depuis {departure}?',
+    'Est-il possible de visiter {transits} en route vers {arrival} depuis {departure}?',
+    'Je souhaite voyager de {departure} à {arrival} en passant par {transits}.',
+    'Quel est le meilleur chemin pour aller de {departure} à {arrival} via {transits}?',
+    'Je planifie un voyage de {departure} à {arrival} avec des escales à {transits}.',
+    'Pouvez-vous me donner les options pour aller de {departure} à {arrival} en passant par {transits}?',
+    'Je voudrais passer par {transits} lors de mon trajet de {departure} à {arrival}.',
 ]
 
-wrong_phrases = [
-    'Je pars de {departure} pour aller à {arrival} {time}.',
-    'Je vais de {departure} à {arrival} {mode}.',
-    'Je quitte {departure} pour me rendre à {arrival} {time}.',
-    'Je voyage de {departure} à {arrival} {time}.',
-    'Je prends un {mode} de {departure} pour aller à {arrival} {time}.',
-    'Je suis à {departure} et je veux aller à {arrival} {time}.',
-    'Je me rends de {departure} à {arrival} {mode}.',
-    'Je vais à {arrival} en partant de {departure} {time}.',
-    'Je suis à {departure} et je veux prendre un vol pour {arrival}.',
-    'Je voudrais un billet de train pour {arrival} depuis {departure}.',
-    'Je suis à {departure} il fait quel temps à {arrival}.',
-    'Après mon départ de {departure}, je voyagerai vers {arrival}.',
-    'Mon voyage commencera à {departure} et se terminera à {arrival}.',
-    'Je dois quitter {departure} afin de rejoindre {arrival} pour une réunion.',
-    'En provenance de {departure}, je me dirigerai vers {arrival} {mode}.',
-    'Je me trouve à {departure} et je veux aller à {arrival} {mode}.',
-    'Je pars de {departure} pour rejoindre {arrival} {mode}.',
-    'Je compte partir de {departure} pour aller à {arrival} {mode}.',
-    'Je vais de {departure} à {arrival} en passant par {transit}.',
-    'Je voyage de {departure} à {arrival} en passant par {transit}.',
-    'Je m\'apprête à quitter {departure} pour rejoindre {arrival}.',
-    'Quelle est la météo à {arrival} aujourd\'hui?',
-    'Je prends le train de {departure} à {arrival}.',
-    'Je vais de {departure} à {arrival} en train, quel est le prix du billet?',
-    'Je pars de {departure} pour aller à {arrival} {time} en train.',
-    'Je vais à {arrival} en partant de {departure} {time} en train.',
-    'Je suis à {departure} et je veux aller à {arrival} en train.',
-    'je suis strasbourgeois et je vais à {arrival} {time} en train.',
-    'je vais à {arrival} {time} en train depuis {departure}, quel est la météo de {arrival}?',
-    'je vais à {arrival} {time} en train depuis {departure}, quel est la météo de berne?',
-    'quel temps fait-il à {arrival} ?',
-    'est-ce qu\'il pleut à {arrival} ?',
-    'le festival de musique de {arrival} est-il annulé ?',
-    'je suis à {departure}',
-    'je vis à {departure}',
-    'Je prévois un trajet de {departure} à {arrival} via {transit}.',
-    'Je cherche les horaires de {mode} de {departure} à {arrival}.',
-    'Pouvez-vous suggérer un itinéraire de voyage de {departure} à {arrival} ?',
-    'Veuillez me trouver le meilleur itinéraire de {departure} à {arrival}.',
-    'J\'ai besoin de rejoindre {arrival} depuis {departure} pour un événement.',
-    'Existe-t-il un train direct entre {departure} et {arrival} ?',
-    'Le festival à {arrival} est-il toujours prévu ce week-end ?',
-    'Y a-t-il des vols disponibles de {departure} à {arrival} {time} ?',
-    'Quel temps fait-il à {arrival} aujourd\'hui ?',
-    'Pourriez-vous vérifier les prévisions météo pour {arrival} ?',
-    'Je veux me rendre de {departure} à {arrival} en {mode}, est-ce possible?',
-    'Existe-t-il un vol en fusée de {departure} à {arrival}?',
-    'Puis-je aller à {arrival} depuis {departure} à dos de chameau?',
+# Phrases qui ne représentent pas des trajets (non-trip)
+non_trip_phrases = [
+    'Quel temps fait-il à {city} aujourd\'hui?',
+    'Je suis à {city}, il fait quel temps ?',
+    'Le festival à {city} est-il toujours prévu ce week-end ?',
+    'Est-ce qu\'il pleut à {city} ?',
+    'Quel est le meilleur restaurant à {city} ?',
+    'Je vis à {city}.',
+    'Je travaille à {city}.',
+    'Je suis actuellement à {city}.',
+    'L\'école est à {city}.',
+    'Le musée de {city} est-il ouvert aujourd\'hui ?',
+    'Je veux savoir les actualités de {city}.',
+    'Quelles sont les attractions touristiques à {city} ?',
+    'Le concert à {city} a-t-il été annulé ?',
+    'Je recherche un hôtel à {city}.',
+    'Quelle heure est-il à {city} ?',
+    'Je voudrais commander une pizza à {city}.',
+    'Y a-t-il un hôpital à {city} ?',
+    'Je veux en savoir plus sur l\'histoire de {city}.',
+    'Quel est le code postal de {city} ?',
+    'Montre-moi les images de {city}.',
+    'Quels sont les événements culturels à {city} cette semaine?',
+    'Je souhaite déménager à {city} l\'année prochaine.',
+    'La météo à {city} est-elle favorable pour une visite?',
+    'Y a-t-il des alertes de sécurité à {city} actuellement?',
+    'Comment est la vie nocturne à {city}?',
+    'Je cherche un bon médecin à {city}.',
+    'Quelles sont les spécialités culinaires de {city}?',
+    'Le parc central de {city} est-il ouvert?',
+    'Y a-t-il des feux d\'artifice à {city} ce soir?',
 ]
 
-test_phrases = [
-    "Je souhaite voyager de {departure} à {arrival} {time}."
-    "Pouvez-vous me dire comment me rendre à {arrival} depuis {departure} ?",
-    "Quelle est la façon la plus rapide d'atteindre {arrival} en partant de {departure} ?",
-    "Je prévois un trajet de {departure} à {arrival} via {transit}.",
-    "Y a-t-il des vols disponibles de {departure} à {arrival} {time} ?",
-    "Je veux réserver un billet de {departure} à {arrival} en utilisant le {mode}.",
-    "Quel temps fait-il à {arrival} aujourd'hui ?",
-    "Est-ce qu'il pleut actuellement à {arrival} ?",
-    "Quel est le coût pour voyager en {mode} de {departure} à {arrival} ?",
-    "Je suis actuellement à {departure}; comment puis-je aller à {arrival} ?",
-    "Veuillez me trouver le meilleur itinéraire de {departure} à {arrival}.",
-    "Existe-t-il un train direct entre {departure} et {arrival} ?",
-    "Je prévois de quitter {departure} et d'arriver à {arrival} en {mode}.",
-    "Pourriez-vous vérifier les prévisions météo pour {arrival} ?",
-    "J'ai besoin de rejoindre {arrival} depuis {departure} pour un événement.",
-    "Quelle est la distance entre {departure} et {arrival} ?",
-    "Y a-t-il des retards sur les routes de {departure} à {arrival} ?",
-    "Je cherche les horaires de {mode} de {departure} à {arrival}.",
-    "Pouvez-vous suggérer un itinéraire de voyage de {departure} à {arrival} ?",
-    "Le festival à {arrival} est-il toujours prévu ce week-end ?"
-    "l'école est à {arrival}",
-    'je veux paris et je veux strasbourg',
-    'quels est le meilleure restaurant à {arrival}',
-    ]
+# Fonction pour remplacer les mots par des synonymes
+def replace_with_synonyms(sentence):
+    words = sentence.split()
+    new_sentence = []
+    for word in words:
+        word_lower = word.lower().strip('.,;?!')
+        if word_lower in synonyms:
+            synonym = random.choice(synonyms[word_lower])
+            new_sentence.append(synonym)
+        else:
+            new_sentence.append(word)
+    return ' '.join(new_sentence)
 
-
-# Open the CSV file for writing
-with open('good_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
-    fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'transit cities', 'Trip Validity']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
-
-    # Generate 50 phrases
+# Fonction pour générer des phrases
+def generate_phrases(phrases_list, label, nb_phrases, writer):
     for _ in range(nb_phrases):
-        phrase_template = random.choice(phrases)
-        departure_city = random.choice(cities)
-
-        # Find placeholders in the phrase template
+        phrase_template = random.choice(phrases_list)
         placeholders = re.findall(r'{(.*?)}', phrase_template)
         data = {}
-
-        # Assign departure city
-        if 'departure' in placeholders:
-            data['departure'] = departure_city
-        else:
-            data['departure'] = 'None'
-
-        # Valid trip: Use French cities and valid modes
-        if 'arrival' in placeholders:
-            arrival_city = random.choice(cities)
-        else:
-            arrival_city = 'None'
-
-        while arrival_city == departure_city:
-            arrival_city = random.choice(cities)
-        data['arrival'] = arrival_city
-        trip_validity = '1'
-
-        if 'mode' in placeholders:
-            data['mode'] = random.choice(valid_modes)
-        if 'time' in placeholders:
-            data['time'] = random.choice(times)
-        n_transits = phrase_template.count('{transit}')
-        if n_transits > 0:
-            available_cities = [city for city in cities if city not in [departure_city, arrival_city]]
-            transit_cities = random.choices(available_cities, k=n_transits)
-            while arrival_city in transit_cities or departure_city in transit_cities:
-                transit_cities = random.choices(available_cities, k=n_transits)
-            for transit_city in transit_cities:
-                phrase_template = phrase_template.replace('{transit}', transit_city, 1)
-        else:
-            transit_cities = 'None'
-
-        arrival_city_output = arrival_city
-        # Build the sentence
-        try:
-            sentence = phrase_template.format(**data)
-        except KeyError:
-            # If placeholders are missing, skip this iteration
-            continue
-
-        writer.writerow({
-            'Sentence': sentence,
-            'Departure City': departure_city,
-            'Arrival City': arrival_city_output,
-            'transit cities': transit_cities,
-            'Trip Validity': trip_validity
-        })
-
-with open('wrong_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
-    fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'transit cities', 'Trip Validity']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
-    # Invalid trip: Use international cities or invalid modes
-    for _ in range(nb_phrases):
-        phrase_template = random.choice(wrong_phrases)
-        # Find placeholders in the phrase template
-        placeholders = re.findall(r'{(.*?)}', phrase_template)
-        data = {}
+        transit_cities = 'None'
 
         if 'departure' in placeholders:
-            departure_city = random.choice(cities + international_cities)
-            data['departure'] = departure_city
-        else:
-            departure_city = 'None'
-
+            data['departure'] = random.choice(cities)
         if 'arrival' in placeholders:
-            arrival_city = random.choice(international_cities + ['Destination inconnue', 'None'])
-            data['arrival'] = arrival_city
-        else:
-            arrival_city = 'None'
-
-        trip_validity = '0'
-
+            data['arrival'] = random.choice(cities)
+            # Éviter que la ville d'arrivée soit la même que celle de départ
+            while 'departure' in data and data['arrival'] == data['departure']:
+                data['arrival'] = random.choice(cities)
+        if 'transits' in placeholders:
+            available_cities = [city for city in cities if city not in data.values()]
+            # Nombre aléatoire d'escales entre 1 et 3
+            n_transits = random.randint(1, 3)
+            transit_cities_list = random.sample(available_cities, k=n_transits)
+            transit_cities = ', '.join(transit_cities_list)
+            data['transits'] = transit_cities
+        elif 'transit' in placeholders:
+            available_cities = [city for city in cities if city not in data.values()]
+            transit_city = random.choice(available_cities)
+            transit_cities = transit_city
+            data['transit'] = transit_city
         if 'mode' in placeholders:
-            data['mode'] = random.choice(invalid_modes + valid_modes)
-            if data['mode'] in invalid_modes:
-                while arrival_city == departure_city:
-                    arrival_city = random.choice(international_cities + ['Destination inconnue', 'None'] + cities)
-                data['arrival'] = arrival_city
+            data['mode'] = random.choice(modes)
         if 'time' in placeholders:
             data['time'] = random.choice(times)
-        n_transits = phrase_template.count('{transit}')
-        if n_transits > 0:
-            available_cities = [city for city in cities + international_cities if city not in [departure_city, arrival_city]]
-            transit_cities = random.choices(available_cities, k=n_transits)
-            while arrival_city in transit_cities or departure_city in transit_cities:
-                transit_cities = random.choices(available_cities, k=n_transits)
-            for transit_city in transit_cities:
-                phrase_template = phrase_template.replace('{transit}', transit_city, 1)
-        else:
-            transit_cities = 'None'
+        if 'city' in placeholders:
+            data['city'] = random.choice(cities)
 
-        if arrival_city in ['Destination inconnue', 'None']:
-            arrival_city_output = 'None'
-        else:
-            arrival_city_output = arrival_city
-
-        # Build the sentence
         try:
             sentence = phrase_template.format(**data)
+            # Remplacer les mots par des synonymes
+            sentence = replace_with_synonyms(sentence)
         except KeyError as e:
-            # If placeholders are missing, skip this iteration
-            print(f"Missing key {e} in data for phrase: {phrase_template}")
             continue
 
-        # Write the row to the CSV file
-        writer.writerow({
-            'Sentence': sentence,
-            'Departure City': departure_city,
-            'Arrival City': arrival_city_output,
-            'transit cities': transit_cities,
-            'Trip Validity': trip_validity
-        })
-
-with open('test_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
-    fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'transit cities', 'Trip Validity']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
-    for _ in range(nb_phrases_test):
-        choice = random.choice([0, 1])
-        data = {}
-        if choice == 0:
-            # Generate invalid trip
-            phrase_template = random.choice(wrong_phrases)
-            placeholders = re.findall(r'{(.*?)}', phrase_template)
-
-            if 'departure' in placeholders:
-                departure_city = random.choice(cities + international_cities)
-                data['departure'] = departure_city
-            else:
-                departure_city = 'None'
-
-            if 'arrival' in placeholders:
-                arrival_city = random.choice(international_cities + ['Destination inconnue', 'None'])
-                data['arrival'] = arrival_city
-            else:
-                arrival_city = 'None'
-
-            trip_validity = '0'
-
-            if 'mode' in placeholders:
-                data['mode'] = random.choice(invalid_modes + valid_modes)
-                if data['mode'] in invalid_modes and arrival_city == departure_city:
-                    while arrival_city == departure_city:
-                        arrival_city = random.choice(international_cities + ['Destination inconnue', 'None'] + cities)
-                    data['arrival'] = arrival_city
-            if 'time' in placeholders:
-                data['time'] = random.choice(times)
-            n_transits = phrase_template.count('{transit}')
-            if n_transits > 0:
-                available_cities = [city for city in cities if city not in [departure_city, arrival_city]]
-                transit_cities = random.choices(available_cities, k=n_transits)
-                while arrival_city in transit_cities or departure_city in transit_cities:
-                    transit_cities = random.choices(available_cities, k=n_transits)
-                for transit_city in transit_cities:
-                    phrase_template = phrase_template.replace('{transit}', transit_city, 1)
-
-        elif choice == 1:
-            # Generate valid trip
-            phrase_template = random.choice(phrases)
-            placeholders = re.findall(r'{(.*?)}', phrase_template)
-
-            if 'departure' in placeholders:
-                departure_city = random.choice(cities)
-                data['departure'] = departure_city
-            else:
-                departure_city = 'None'
-
-            if 'arrival' in placeholders:
-                arrival_city = random.choice(cities)
-                while arrival_city == departure_city:
-                    arrival_city = random.choice(cities)
-                data['arrival'] = arrival_city
-            else:
-                arrival_city = 'None'
-
-            trip_validity = '1'
-
-            if 'mode' in placeholders:
-                data['mode'] = random.choice(valid_modes)
-            if 'time' in placeholders:
-                data['time'] = random.choice(times)
-            n_transits = phrase_template.count('{transit}')
-            if n_transits > 0:
-                available_cities = [city for city in cities + international_cities if city not in [departure_city, arrival_city]]
-                transit_cities = random.choices(available_cities, k=n_transits)
-                while arrival_city in transit_cities or departure_city in transit_cities:
-                    transit_cities = random.choices(available_cities, k=n_transits)
-                for transit_city in transit_cities:
-                    phrase_template = phrase_template.replace('{transit}', transit_city, 1)
-            else:
-                transit_cities = 'None'
-        else:
-            continue  # Should not happen
-
-        # Build the sentence
-        try:
-            sentence = phrase_template.format(**data)
-        except KeyError as e:
-            print(f"Missing key {e} in data for phrase: {phrase_template}")
-            continue
-
-        # Write the row to the CSV file
         writer.writerow({
             'Sentence': sentence,
             'Departure City': data.get('departure', 'None'),
             'Arrival City': data.get('arrival', 'None'),
-            'transit cities': transit_cities,
-            'Trip Validity': trip_validity
+            'Transit Cities': transit_cities,
+            'Is Trip': label
         })
 
+# Génération des phrases pour l'entraînement
+with open('phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
+    fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'Transit Cities', 'Is Trip']
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
 
-print("Done generating phrases!")
+    # Générer des phrases de trajet (Is Trip = 1)
+    generate_phrases(trip_phrases, '1', nb_phrases, writer)
+
+    # Générer des phrases non liées aux trajets (Is Trip = 0)
+    generate_phrases(non_trip_phrases, '0', nb_phrases, writer)
+
+# Génération des phrases pour le test
+with open('test_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
+    fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'Transit Cities', 'Is Trip']
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for _ in range(nb_phrases_test):
+        label = random.choice(['0', '1'])
+        if label == '1':
+            generate_phrases(trip_phrases, label, 1, writer)
+        else:
+            generate_phrases(non_trip_phrases, label, 1, writer)
+
+print("Génération des phrases terminée !")

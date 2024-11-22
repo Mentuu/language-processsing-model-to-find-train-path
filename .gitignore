@@ -2,6 +2,5 @@
 /trained_model
 /__pycache__
 /target
-good_phrases.csv
-wrong_phrases.csv
+phrases.csv
 test_phrases.csv
