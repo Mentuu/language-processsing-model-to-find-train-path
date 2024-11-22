@@ -4,8 +4,8 @@ import re
 import json
 import os
 
-nb_phrases = 500
-nb_phrases_test = 250
+nb_phrases = 20000
+nb_phrases_test = 2500
 
 # Supprimer les fichiers existants
 if os.path.exists("phrases.csv"):
@@ -80,7 +80,7 @@ synonyms = {
 }
 
 # Phrases qui représentent des trajets (trip)
-trip_phrases = [
+trip_phrases_all = [
     'Je pars de {departure} pour aller à {arrival} {time}.',
     'Je vais de {departure} à {arrival} {mode}.',
     'Je quitte {departure} pour me rendre à {arrival} {time}.',
@@ -125,7 +125,7 @@ trip_phrases = [
 ]
 
 # Phrases qui ne représentent pas des trajets (non-trip)
-non_trip_phrases = [
+non_trip_phrases_all = [
     'Quel temps fait-il à {city} aujourd\'hui?',
     'Je suis à {city}, il fait quel temps ?',
     'Le festival à {city} est-il toujours prévu ce week-end ?',
@@ -349,6 +349,18 @@ non_trip_phrases = [
     'je vais nique tous le monde de {city} à {city}'
 ]
 
+# Mélanger les templates et les diviser
+random.shuffle(trip_phrases_all)
+random.shuffle(non_trip_phrases_all)
+
+split_ratio = 0.8  # Utiliser 80% des templates pour l'entraînement, 20% pour le test
+
+trip_phrases_train = trip_phrases_all[:int(len(trip_phrases_all) * split_ratio)]
+trip_phrases_test = trip_phrases_all[int(len(trip_phrases_all) * split_ratio):]
+
+non_trip_phrases_train = non_trip_phrases_all[:int(len(non_trip_phrases_all) * split_ratio)]
+non_trip_phrases_test = non_trip_phrases_all[int(len(non_trip_phrases_all) * split_ratio):]
+
 
 # Fonction pour remplacer les mots par des synonymes
 def replace_with_synonyms(sentence):
@@ -364,8 +376,12 @@ def replace_with_synonyms(sentence):
     return ' '.join(new_sentence)
 
 # Fonction pour générer des phrases
-def generate_phrases(phrases_list, label, nb_phrases, writer):
-    for _ in range(nb_phrases):
+def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
+    generated_data = []
+    attempts = 0
+    max_attempts = nb_phrases * 10  # Pour éviter une boucle infinie
+    while len(generated_data) < nb_phrases and attempts < max_attempts:
+        attempts += 1
         phrase_template = random.choice(phrases_list)
         placeholders = re.findall(r'{(.*?)}', phrase_template)
         data = {}
@@ -404,37 +420,56 @@ def generate_phrases(phrases_list, label, nb_phrases, writer):
         except KeyError as e:
             continue
 
-        writer.writerow({
-            'Sentence': sentence,
-            'Departure City': data.get('departure', 'None'),
-            'Arrival City': data.get('arrival', 'None'),
-            'Transit Cities': transit_cities,
-            'Is Trip': label
-        })
+        if sentence not in existing_sentences:
+            existing_sentences.add(sentence)
+            generated_data.append({
+                'Sentence': sentence,
+                'Departure City': data.get('departure', 'None'),
+                'Arrival City': data.get('arrival', 'None'),
+                'Transit Cities': transit_cities,
+                'Is Trip': label
+            })
+
+    return generated_data
 
 # Génération des phrases pour l'entraînement
+train_existing_sentences = set()
 with open('phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
     fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'Transit Cities', 'Is Trip']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
     # Générer des phrases de trajet (Is Trip = 1)
-    generate_phrases(trip_phrases, '1', nb_phrases, writer)
+    trip_phrases_train_data = generate_phrases(trip_phrases_train, '1', nb_phrases, train_existing_sentences)
+    for data in trip_phrases_train_data:
+        writer.writerow(data)
 
     # Générer des phrases non liées aux trajets (Is Trip = 0)
-    generate_phrases(non_trip_phrases, '0', nb_phrases, writer)
+    non_trip_phrases_train_data = generate_phrases(non_trip_phrases_train, '0', nb_phrases, train_existing_sentences)
+    for data in non_trip_phrases_train_data:
+        writer.writerow(data)
 
 # Génération des phrases pour le test
+test_existing_sentences = set()
 with open('test_phrases.csv', 'w', newline='', encoding='utf-8') as csvfile:
     fieldnames = ['Sentence', 'Departure City', 'Arrival City', 'Transit Cities', 'Is Trip']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
-    for _ in range(nb_phrases_test):
-        label = random.choice(['0', '1'])
-        if label == '1':
-            generate_phrases(trip_phrases, label, 1, writer)
-        else:
-            generate_phrases(non_trip_phrases, label, 1, writer)
+    # Générer des phrases de test sans chevauchement
+    total_test_phrases = nb_phrases_test
+    nb_test_phrases_per_label = total_test_phrases // 2
+
+    # Générer des phrases de trajet pour le test
+    trip_phrases_test_data = generate_phrases(trip_phrases_test, '1', nb_test_phrases_per_label, train_existing_sentences)
+    for data in trip_phrases_test_data:
+        writer.writerow(data)
+        test_existing_sentences.add(data['Sentence'])
+
+    # Générer des phrases non liées aux trajets pour le test
+    non_trip_phrases_test_data = generate_phrases(non_trip_phrases_test, '0', nb_test_phrases_per_label, train_existing_sentences)
+    for data in non_trip_phrases_test_data:
+        writer.writerow(data)
+        test_existing_sentences.add(data['Sentence'])
 
 print("Génération des phrases terminée !")
