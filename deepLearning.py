@@ -14,6 +14,15 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
+import platform
+import os
+
+# Check if the OS is macOS
+if platform.system() == "Darwin":
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    print("Disabled tokenizers parallelism for macOS.")
+else:
+    print("No changes to tokenizers parallelism.")
 
 # Charger les données depuis phrases.csv et test_phrases.csv
 data = pd.read_csv('phrases.csv')
@@ -90,7 +99,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
 )
 
 # Définir le dispositif (GPU si disponible)
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cpu') if torch.cuda.is_available() else torch.device('cpu')
 class_weights = class_weights.to(device)
 model = model.to(device)
 
@@ -117,8 +126,9 @@ class CustomTrainer(Trainer):
         labels = inputs.get("labels").to(model.device)
         outputs = model(**inputs)
         logits = outputs.get('logits')
-        loss_fct = torch.nn.CrossEntropyLoss(weight=self.class_weights)
+        loss_fct = torch.nn.CrossEntropyLoss()
         loss = loss_fct(logits.view(-1, model.config.num_labels), labels.view(-1))
+
         return (loss, outputs) if return_outputs else loss
 
 # Créer le CustomTrainer
