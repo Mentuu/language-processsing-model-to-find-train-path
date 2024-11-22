@@ -167,7 +167,6 @@ test_phrases = [
     "l'école est à {arrival}",
     'je veux paris et je veux strasbourg',
     'quels est le meilleure restaurant à {arrival}',
-    ''
     ]
 
 
