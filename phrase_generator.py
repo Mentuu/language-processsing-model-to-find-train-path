@@ -346,7 +346,7 @@ non_trip_phrases_all = [
     'Je veux savoir les actualités de {city}.',
     'je vais niquer ta mère à {city}',
     'je vais niquer tous le monde de {city}',
-    'je vais nique tous le monde de {city} à {city}'
+    'je vais niquer tous le monde de {city} à {city}'
 ]
 
 # Mélanger les templates et les diviser
