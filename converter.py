@@ -1,4 +1,3 @@
-import const_utils
 import spacy
 import csv
 import fct_utils
@@ -7,10 +6,7 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
-# Specify the path where your model and tokenizer are saved
 model_path = './target/fine-tuned-bert'
-
-# Load the tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 model = AutoModelForSequenceClassification.from_pretrained(model_path)
 
@@ -26,18 +22,15 @@ sncf_dataset = 'liste-des-gares.csv'
 communes_set = set()
 commune_to_stations = {}
 
-# Load the dataset
 df = pd.read_csv('dataset.csv')
 
-# Keep relevant columns
 df = df[['Sentence', 'Departure City', 'Arrival City', 'Trip Validity']]
 
-# Convert 'Trip Validity' to numerical labels
 df['Validity Label'] = df['Trip Validity'].map({'VALID_TRIP': 1, 'INVALID_TRIP': 0})
 
-# Drop rows with missing values or invalid labels
 df = df.dropna(subset=['Sentence', 'Validity Label'])
 
+banned_vehicles = ["moto", "voiture", "scooter", "camion", "quad", "buggy", "chameau", "montgolfière", "trottinette", "vélo", "vélo électrique", "tapis volant", "hélicoptère", "avion", "bateau", "yacht", "sous-marin", "fusée", "vaisseau spatial"]
 
 matcher = Matcher(nlp.vocab)
 pattern_trip = [
@@ -94,80 +87,58 @@ with open(sncf_dataset, 'r', encoding='utf-8') as sncf_file:
 
 #################################################################################### fonctions ############################
 
-def extraire_lieux(phrase):
+def extraireLieux(phrase):
     doc = nlp(phrase)
-    verbe = []
-
-    # Utiliser le Matcher pour trouver les motifs
-    matches = matcher(doc)
-    
-    # Trier les correspondances par leur position dans le texte
-    matches = sorted(matches, key=lambda x: x[1])
-    
-    # Liste pour stocker les villes avec leur contexte
-    cities_with_context = []
-
-    for match_id, start, end in matches:
-        span = doc[start:end]
-        match_label = nlp.vocab.strings[match_id]
-        
-        if match_label == 'TRIP_PATTERN':
-            # Initialiser le contexte
-            current_context = None
-            tokens = span
-            for token in tokens:
-                # Collecter les verbes
-                if token.pos_ in ["VERB", "AUX"]:
-                    verbe.append(token.lemma_)
-                
-                # Identifier les prépositions et ajuster le contexte
-                if token.lower_ in ['de', 'depuis']:
-                    current_context = 'DEPARTURE'
-                elif token.lower_ in ['à', 'vers', 'jusqu\'à', 'pour', 'afin de']:
-                    current_context = 'ARRIVAL'
-                elif token.lower_ in ['en', 'passant', 'par', 'via']:
-                    current_context = 'INTERMEDIATE'
-                
-                # Extraire les villes avec leur contexte
-                if token.ent_type_ in ["LOC", "GPE"]:
-                    city_name = token.text
-                    cities_with_context.append((city_name, current_context))
-                    # Réinitialiser le contexte après avoir assigné le lieu
-                    current_context = None
-
-    # Traitement des villes collectées
     lieu_depart = None
     lieu_arrivee = None
     lieux_intermediaires = []
 
-    for city_name, context in cities_with_context:
-        if context == 'DEPARTURE' and not lieu_depart:
-            lieu_depart = city_name
-        elif context == 'ARRIVAL':
-            lieu_arrivee = city_name
-        elif context == 'INTERMEDIATE':
-            lieux_intermediaires.append(city_name)
-        else:
-            # Si le contexte est None
-            if not lieu_depart:
-                lieu_depart = city_name
-            elif not lieu_arrivee:
-                lieu_arrivee = city_name
+    # Liste des prépositions indiquant le départ et l'arrivée
+    depart_preps = {'de', 'depuis'}
+    arrivee_preps = {'à', 'vers', 'pour', 'en direction de'}
+    intermediaire_preps = {'par', 'via', 'en passant par'}
+
+    # Parcourir les entités nommées
+    for ent in doc.ents:
+        if ent.label_ in ["LOC", "GPE"]:
+            # Trouver la préposition associée à l'entité
+            prep = None
+            for token in ent.root.lefts:
+                if token.pos_ == 'ADP':
+                    prep = token.text.lower()
+                    break
+            # Si aucune préposition à gauche, chercher à droite (cas rare)
+            if not prep:
+                for token in ent.root.rights:
+                    if token.pos_ == 'ADP':
+                        prep = token.text.lower()
+                        break
+
+            # Déterminer le contexte en fonction de la préposition
+            if prep in depart_preps:
+                lieu_depart = ent.text
+            elif prep in arrivee_preps:
+                lieu_arrivee = ent.text
+            elif prep in intermediaire_preps:
+                lieux_intermediaires.append(ent.text)
             else:
-                lieux_intermediaires.append(city_name)
-                
-    # Si aucun lieu n'a été trouvé par le Matcher, utiliser les entités
-    if not lieu_depart or not lieu_arrivee:
-        # Extraire les entités de type lieu
-        entities = [ent.text for ent in doc.ents if ent.label_ in ["LOC", "GPE"]]
-        if entities:
-            if not lieu_depart:
-                lieu_depart = entities[0]
-            if not lieu_arrivee and len(entities) > 1:
-                lieu_arrivee = entities[-1]
-            # Les lieux intermédiaires sont les entités entre départ et arrivée
-            lieux_intermediaires = entities[1:-1]
-    
+                # Si pas de préposition claire, utiliser les dépendances
+                if ent.root.dep_ in {'obj', 'obl'}:
+                    # Vérifier le verbe associé
+                    verb = ent.root.head
+                    if verb.lemma_ in {'partir', 'quitter'}:
+                        lieu_depart = ent.text
+                    elif verb.lemma_ in {'aller', 'arriver', 'rejoindre'}:
+                        lieu_arrivee = ent.text
+                else:
+                    # Si toujours ambigu, vérifier la position dans la phrase
+                    if not lieu_depart:
+                        lieu_depart = ent.text
+                    elif not lieu_arrivee:
+                        lieu_arrivee = ent.text
+                    else:
+                        lieux_intermediaires.append(ent.text)
+
     # Normaliser les noms de villes
     lieu_depart = fct_utils.normalize_str(lieu_depart) if lieu_depart else None
     lieu_arrivee = fct_utils.normalize_str(lieu_arrivee) if lieu_arrivee else None
@@ -180,145 +151,103 @@ def extraire_lieux(phrase):
         lieu_arrivee = None
     lieux_intermediaires = [city for city in lieux_intermediaires if city in communes_set]
 
-    # Enlever les lieux déjà assignés des lieux intermédiaires
-    assigned_cities = set(filter(None, [lieu_depart, lieu_arrivee]))
-    lieux_intermediaires = [city for city in lieux_intermediaires if city not in assigned_cities]
+    return [], lieu_depart, lieu_arrivee, lieux_intermediaires
 
-    # Supprimer les doublons dans les verbes
-    verbe = list(set(verbe))
 
-    return verbe, lieu_depart, lieu_arrivee, lieux_intermediaires
-
-def est_voyage_valide(phrase, lieu_depart, lieu_arrivee):
-    # Check if both departure and arrival cities are valid
-    if not lieu_depart or not lieu_arrivee or lieu_depart == lieu_arrivee:
-        return "INVALID_TRIP"
-    
-    if lieu_depart not in communes_set or lieu_arrivee not in communes_set:
-        return "INVALID_TRIP"
-    
-    doc = nlp(phrase)
-    movement_verb_found = False
-    
-    for token in doc:
-        if token.pos_ == 'VERB':
-            lemma = token.lemma_.lower()
-            if lemma in const_utils.movement_verbs:
-                # Check for negation
-                negation_words = {'ne', 'pas', 'jamais', 'plus', 'rien', 'personne', 'aucun', 'guère'}
-                negated = any(
-                    child.dep_ == 'advmod' and child.lemma_.lower() in negation_words
-                    for child in token.children
-                )
-                if negated:
-                    return "INVALID_TRIP"
-                movement_verb_found = True
-                break
-    if not movement_verb_found:
-        return "INVALID_TRIP"
-    
-    # Check for invalid modes of transport using lemmatization
-    invalid_transports = set(const_utils.invalid_transports)
-    tokens_lemmatized = [token.lemma_.lower() for token in doc]
-    if invalid_transports.intersection(tokens_lemmatized):
-        return "INVALID_TRIP"
-    
-    return "VALID_TRIP"
-
-def est_voyage_valide2(phrase):
-    # Tokenize the input phrase
+def estTrajet(phrase):
     inputs = tokenizer(
         phrase,
         return_tensors='pt',
         truncation=True,
         padding=True,
-        max_length=128  # Should match the max_length used during training
+        max_length=128
     )
-    # Move inputs to the same device as the model
     inputs = {key: value.to(device) for key, value in inputs.items()}
 
-    # Get predictions from the model without computing gradients
     with torch.no_grad():
         outputs = model(**inputs)
 
-    # Get the predicted class index (0 or 1)
     logits = outputs.logits
     predicted_class_id = logits.argmax(-1).item()
 
-    # Map class indices to labels
-    class_labels = ['Invalid', 'Valid']  # Adjust if your labels are different
+    class_labels = ['Invalid', 'Valid']
     predicted_label = class_labels[predicted_class_id]
-    if predicted_label == 'Invalid':
-        return 0
+    if (predicted_label == 'Invalid'):
+        return "0"
     else:
-        return 1
-
-# Processing the utils.dataset
-total_phrases = 0
-correct_departure = 0
-correct_arrival = 0
-correct_validity = 0
-
-############################################################################# Main #####################
-with open(dataset, 'r', encoding='utf-8') as csvfile:
-    csvreader = csv.DictReader(csvfile)
+        return "1"
     
-    for row in csvreader:
-        # Extract data from each row
-        phrase = row['Sentence']
-        ville_depart_attendue_raw = row['Departure City'].strip()
-        ville_arrivee_attendue_raw = row['Arrival City'].strip()
-        validite_attendue = row['Trip Validity'].strip()
-        
-        # Normalize the expected cities
-        ville_depart_attendue = fct_utils.normalize_str(ville_depart_attendue_raw)
-        ville_arrivee_attendue = fct_utils.normalize_str(ville_arrivee_attendue_raw)
-        
-        # Keep track of the total number of phrases
-        total_phrases += 1
+def is_banned_vehicle(phrase):
+    doc = nlp(phrase.lower())
+    for token in doc:
+        # Vérifier si le token est un nom commun
+        if token.pos_ == "NOUN":
+            # Normaliser le mot en enlevant les accents et en le mettant en minuscule
+            vehicle = token.lemma_.lower()
+            if vehicle in banned_vehicles:
+                return 1
+    return 0
 
-        # Extract departure and arrival locations
-        verbe, lieu_depart_raw, lieu_arrivee_raw, lieux_intermediaires = extraire_lieux(phrase)
-        
-        # Normalize the extracted cities
-        lieu_depart = fct_utils.normalize_str(lieu_depart_raw) if lieu_depart_raw else None
-        lieu_arrivee = fct_utils.normalize_str(lieu_arrivee_raw) if lieu_arrivee_raw else None
 
-        # Check if the extracted cities are in the communes list
-        if lieu_depart and lieu_depart in communes_set:
-            # Get the departure stations
-            departure_stations = commune_to_stations[lieu_depart]
-        else:
-            # print(f"Departure city '{lieu_depart_raw}' not found in SNCF communes list.")
-            lieu_depart = None
-            departure_stations = None
+def processPhrases(datasetToProcess):
+    with open(datasetToProcess, 'r', encoding='utf-8') as csvfile:
+        csvreader = csv.DictReader(csvfile)
 
-        if lieu_arrivee and lieu_arrivee in communes_set:
-            # Get the arrival stations
-            arrival_stations = commune_to_stations[lieu_arrivee]
-        else:
-            # print(f"Arrival city '{lieu_arrivee_raw}' not found in SNCF communes list.")
-            lieu_arrivee = None
-            arrival_stations = None
+        for row in csvreader:
+            phrase = row['Sentence']
+            ville_depart_attendue_raw = row['Departure City'].strip()
+            ville_arrivee_attendue_raw = row['Arrival City'].strip()
+            ville_intermediaire_attendue_raw = row['Intermediate City'].strip()
+            validite_attendue = row['Trip Validity'].strip()
+            
+            ville_depart_attendue = fct_utils.normalize_str(ville_depart_attendue_raw)
+            ville_arrivee_attendue = fct_utils.normalize_str(ville_arrivee_attendue_raw)
+            ville_intermediaire_attendue = fct_utils.normalize_str(ville_intermediaire_attendue_raw)
 
-        # Validate the mode of transport
-        # validite_predite = est_voyage_valide(phrase, lieu_depart, lieu_arrivee)
-        validite_predite = str(est_voyage_valide2(phrase))
-        # Check correctness
-        if validite_predite == validite_attendue:
-            correct_validity += 1
-        # Display the results for debugging
-        if ((validite_predite != validite_attendue) or (lieu_depart != ville_depart_attendue and lieu_depart in communes_set) or (lieu_arrivee != ville_arrivee_attendue)):
-            print(f"Phrase: {phrase}")
-            print(f"Verbes trouvés : {verbe}")
-            print(f"Lieu de départ détecté : {lieu_depart} (Attendu : {ville_depart_attendue})")
-            print(f"Lieu d'arrivée détecté : {lieu_arrivee} (Attendu : {ville_arrivee_attendue})")
-            print(f"Lieux intermédiaires : {lieux_intermediaires}")
-            print(f"Validité détectée : {validite_predite} (Attendu : {validite_attendue})")
-            print("\n")
+            if estTrajet(phrase) == "0":
+                print(f"Phrase: {phrase} is a INVALID trip, [NOT A TRIP], validité attendue: {validite_attendue}\n")
+                continue
+            if is_banned_vehicle(phrase) == 1:
+                print(f"Phrase: {phrase} is a INVALID trip, [BANNED VEHICULE],validité attendue: {validite_attendue}\n")
+                continue
 
-# Calculate the success rates
-validity_success_rate = (correct_validity / total_phrases) * 100
+            verbe, lieu_depart_raw, lieu_arrivee_raw, lieux_intermediaires_raw = extraireLieux(phrase)
+            lieu_depart = fct_utils.normalize_str(lieu_depart_raw) if lieu_depart_raw else None
+            lieu_arrivee = fct_utils.normalize_str(lieu_arrivee_raw) if lieu_arrivee_raw else None
+            lieux_intermediaires = [fct_utils.normalize_str(city) for city in lieux_intermediaires_raw] if lieux_intermediaires_raw else []
+            if lieu_depart and lieu_depart in communes_set:
+                departure_stations = commune_to_stations[lieu_depart]
+            else:
+                print(f"lieu_depart: {lieu_depart}")
+                print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE], validité attendu: {validite_attendue}\n")
+                lieu_depart = None
+                departure_stations = None
+                continue
+            if lieu_arrivee and lieu_arrivee in communes_set:
+                arrival_stations = commune_to_stations[lieu_arrivee]
+            else:
+                print(f"lieu_arrivee",{lieu_arrivee})
+                print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]: {validite_attendue}\n")
+                arrival_stations = None
+                lieu_arrivee = None
+                continue
+            if ville_arrivee_attendue != lieu_arrivee:
+                print(f"Phrase: {phrase}")
+                print(f"Ville de d'arrive attendue: {ville_arrivee_attendue} |||| Ville de d'arrivee extraite: {lieu_arrivee}\n")
+                break
+            elif ville_depart_attendue != lieu_depart:
+                print(f"Phrase: {phrase}")
+                print(f"Ville de départ attendue: {ville_depart_attendue} |||| Ville de départ extraite: {lieu_depart}\n")
+                break
+            elif ville_intermediaire_attendue == "NONE" and lieux_intermediaires != []:
+                print(f"Phrase: {phrase}")
+                print(f"Ville intermédiaire attendue: {ville_intermediaire_attendue} |||| Ville intermédiaire extraite: {lieux_intermediaires}\n")
+                break
 
-# Display the success rates
-print(f"Taux de succès pour la validité : {validity_success_rate:.2f}%")
+            print(f"Phrase: {phrase} is a VALID trip, validité attendue: {validite_attendue}")
+            print(f"Ville de départ: {lieu_depart}, Ville de départ attendue: {ville_depart_attendue}")
+            print(f"Ville d'arrivée: {lieu_arrivee}, Ville d'arrivée attendue: {ville_arrivee_attendue}")
+            print(f"Villes intermédiaires: {lieux_intermediaires}, Ville intermédiaire attendue: {ville_intermediaire_attendue}\n")
+
+# print("COMMUNES SET",communes_set)
+processPhrases(dataset)

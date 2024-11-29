@@ -122,6 +122,7 @@ trip_phrases_all = [
     'Je planifie un voyage de {departure} à {arrival} avec des escales à {transits}.',
     'Pouvez-vous me donner les options pour aller de {departure} à {arrival} en passant par {transits}?',
     'Je voudrais passer par {transits} lors de mon trajet de {departure} à {arrival}.',
+    'je prends le train de {departure} à {arrival}',
 ]
 
 # Phrases qui ne représentent pas des trajets (non-trip)
