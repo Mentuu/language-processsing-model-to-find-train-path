@@ -87,71 +87,63 @@ with open(sncf_dataset, 'r', encoding='utf-8') as sncf_file:
 
 #################################################################################### fonctions ############################
 
+from spacy.matcher import Matcher
+
 def extraireLieux(phrase):
     doc = nlp(phrase)
     lieu_depart = None
     lieu_arrivee = None
-    lieux_intermediaires = []
 
-    # Liste des prépositions indiquant le départ et l'arrivée
-    depart_preps = {'de', 'depuis'}
-    arrivee_preps = {'à', 'vers', 'pour', 'en direction de'}
-    intermediaire_preps = {'par', 'via', 'en passant par'}
+    matcher = Matcher(nlp.vocab)
 
-    # Parcourir les entités nommées
-    for ent in doc.ents:
-        if ent.label_ in ["LOC", "GPE"]:
-            # Trouver la préposition associée à l'entité
-            prep = None
-            for token in ent.root.lefts:
-                if token.pos_ == 'ADP':
-                    prep = token.text.lower()
+    # Motif pour la ville de départ
+    dep_pattern = [
+        {"LEMMA": {"IN": ["être", "se trouver", "résider", "habiter"]}, "POS": {"IN": ["VERB", "AUX"]}},
+        {"OP": "*"},
+        {"LOWER": {"IN": ["à", "en"]}},
+        {"OP": "*"},
+        {"ENT_TYPE": {"IN": ["LOC", "GPE"]}}
+    ]
+    matcher.add("DEPARTURE_PATTERN", [dep_pattern])
+
+    # Motif pour la ville d'arrivée
+    arr_pattern = [
+        {"LEMMA": {"IN": ["aller", "arriver", "rejoindre", "partir", "souhaiter", "vouloir", "devoir", "prendre", "quitter"]}, "POS": {"IN": ["VERB", "AUX"]}},
+        {"OP": "*"},
+        {"LOWER": {"IN": ["à", "pour", "vers", "en"]}, "OP": "?"},
+        {"OP": "*"},
+        {"ENT_TYPE": {"IN": ["LOC", "GPE"]}}
+    ]
+    matcher.add("ARRIVAL_PATTERN", [arr_pattern])
+
+    matches = matcher(doc)
+    for match_id, start, end in matches:
+        span = doc[start:end]
+        match_label = nlp.vocab.strings[match_id]
+        if match_label == "DEPARTURE_PATTERN" and not lieu_depart:
+            # Rechercher le dernier token qui est une entité de lieu
+            for token in reversed(span):
+                if token.ent_type_ in ["LOC", "GPE"]:
+                    lieu_depart = token.text
                     break
-            # Si aucune préposition à gauche, chercher à droite (cas rare)
-            if not prep:
-                for token in ent.root.rights:
-                    if token.pos_ == 'ADP':
-                        prep = token.text.lower()
-                        break
+        elif match_label == "ARRIVAL_PATTERN" and not lieu_arrivee:
+            for token in reversed(span):
+                if token.ent_type_ in ["LOC", "GPE"]:
+                    lieu_arrivee = token.text
+                    break
 
-            # Déterminer le contexte en fonction de la préposition
-            if prep in depart_preps:
-                lieu_depart = ent.text
-            elif prep in arrivee_preps:
-                lieu_arrivee = ent.text
-            elif prep in intermediaire_preps:
-                lieux_intermediaires.append(ent.text)
-            else:
-                # Si pas de préposition claire, utiliser les dépendances
-                if ent.root.dep_ in {'obj', 'obl'}:
-                    # Vérifier le verbe associé
-                    verb = ent.root.head
-                    if verb.lemma_ in {'partir', 'quitter'}:
-                        lieu_depart = ent.text
-                    elif verb.lemma_ in {'aller', 'arriver', 'rejoindre'}:
-                        lieu_arrivee = ent.text
-                else:
-                    # Si toujours ambigu, vérifier la position dans la phrase
-                    if not lieu_depart:
-                        lieu_depart = ent.text
-                    elif not lieu_arrivee:
-                        lieu_arrivee = ent.text
-                    else:
-                        lieux_intermediaires.append(ent.text)
-
-    # Normaliser les noms de villes
+    # Normalisation et validation
     lieu_depart = fct_utils.normalize_str(lieu_depart) if lieu_depart else None
     lieu_arrivee = fct_utils.normalize_str(lieu_arrivee) if lieu_arrivee else None
-    lieux_intermediaires = [fct_utils.normalize_str(city) for city in lieux_intermediaires]
 
-    # Valider les villes contre le set de communes
     if lieu_depart and lieu_depart not in communes_set:
+        print(f"lieu_depart: {lieu_depart} n'est pas une commune française.")
         lieu_depart = None
     if lieu_arrivee and lieu_arrivee not in communes_set:
+        print(f"lieu_arrivee: {lieu_arrivee} n'est pas une commune française.")
         lieu_arrivee = None
-    lieux_intermediaires = [city for city in lieux_intermediaires if city in communes_set]
 
-    return [], lieu_depart, lieu_arrivee, lieux_intermediaires
+    return [], lieu_depart, lieu_arrivee, []
 
 
 def estTrajet(phrase):
@@ -204,11 +196,11 @@ def processPhrases(datasetToProcess):
             ville_arrivee_attendue = fct_utils.normalize_str(ville_arrivee_attendue_raw)
             ville_intermediaire_attendue = fct_utils.normalize_str(ville_intermediaire_attendue_raw)
 
-            if estTrajet(phrase) == "0":
+            if estTrajet(phrase) == "0" and validite_attendue == "1":
                 print(f"Phrase: {phrase} is a INVALID trip, [NOT A TRIP], validité attendue: {validite_attendue}\n")
                 continue
             if is_banned_vehicle(phrase) == 1:
-                print(f"Phrase: {phrase} is a INVALID trip, [BANNED VEHICULE],validité attendue: {validite_attendue}\n")
+                # print(f"Phrase: {phrase} is a INVALID trip, [BANNED VEHICULE],validité attendue: {validite_attendue}\n")
                 continue
 
             verbe, lieu_depart_raw, lieu_arrivee_raw, lieux_intermediaires_raw = extraireLieux(phrase)
@@ -218,16 +210,18 @@ def processPhrases(datasetToProcess):
             if lieu_depart and lieu_depart in communes_set:
                 departure_stations = commune_to_stations[lieu_depart]
             else:
-                print(f"lieu_depart: {lieu_depart}")
-                print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE], validité attendu: {validite_attendue}\n")
+                if validite_attendue == "1":
+                    print(f"lieu_depart: {lieu_depart}")
+                    print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE], validité attendu: {validite_attendue}\n")
                 lieu_depart = None
                 departure_stations = None
                 continue
             if lieu_arrivee and lieu_arrivee in communes_set:
                 arrival_stations = commune_to_stations[lieu_arrivee]
             else:
-                print(f"lieu_arrivee",{lieu_arrivee})
-                print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]: {validite_attendue}\n")
+                if validite_attendue == "1":
+                    print(f"lieu_arrivee",{lieu_arrivee})
+                    print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]: {validite_attendue}\n")
                 arrival_stations = None
                 lieu_arrivee = None
                 continue
@@ -244,10 +238,11 @@ def processPhrases(datasetToProcess):
                 print(f"Ville intermédiaire attendue: {ville_intermediaire_attendue} |||| Ville intermédiaire extraite: {lieux_intermediaires}\n")
                 break
 
-            print(f"Phrase: {phrase} is a VALID trip, validité attendue: {validite_attendue}")
-            print(f"Ville de départ: {lieu_depart}, Ville de départ attendue: {ville_depart_attendue}")
-            print(f"Ville d'arrivée: {lieu_arrivee}, Ville d'arrivée attendue: {ville_arrivee_attendue}")
-            print(f"Villes intermédiaires: {lieux_intermediaires}, Ville intermédiaire attendue: {ville_intermediaire_attendue}\n")
+            # print(f"Phrase: {phrase} is a VALID trip, validité attendue: {validite_attendue}")
+            # print(f"Ville de départ: {lieu_depart}, Ville de départ attendue: {ville_depart_attendue}")
+            # print(f"Ville d'arrivée: {lieu_arrivee}, Ville d'arrivée attendue: {ville_arrivee_attendue}")
+            # print(f"Villes intermédiaires: {lieux_intermediaires}, Ville intermédiaire attendue: {ville_intermediaire_attendue}\n")
+            # print(f"//////////////////////////////////////////////////////////////////////////////////////////////////////////////\n")
 
 # print("COMMUNES SET",communes_set)
 processPhrases(dataset)

@@ -9,3 +9,10 @@ def normalize_str(s):
         if unicodedata.category(c) != 'Mn'
     )
     return s.upper()
+
+def find_governing_verb(token):
+    for ancestor in token.ancestors:
+        if ancestor.pos_ in ['VERB', 'AUX']:
+            return ancestor
+    return None
+
