@@ -15,7 +15,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 model = model.to(device)
 
 spacy.prefer_gpu()
-nlp = spacy.load('fr_core_news_lg')
+nlp = spacy.load('custom_model')
 dataset = 'dataset.csv'
 sncf_dataset = 'liste-des-gares.csv'
 
@@ -31,38 +31,6 @@ df['Validity Label'] = df['Trip Validity'].map({'VALID_TRIP': 1, 'INVALID_TRIP':
 df = df.dropna(subset=['Sentence', 'Validity Label'])
 
 banned_vehicles = ["moto", "voiture", "scooter", "camion", "quad", "buggy", "chameau", "montgolfière", "trottinette", "vélo", "vélo électrique", "tapis volant", "hélicoptère", "avion", "bateau", "yacht", "sous-marin", "fusée", "vaisseau spatial"]
-
-matcher = Matcher(nlp.vocab)
-pattern_trip = [
-    # Sujet (optionnel)
-    {'POS': 'PRON', 'OP': '?'},
-
-    # Verbe de départ
-    {'LEMMA': {'IN': ['quitter', 'partir', 'prendre', 'laisser', 'sortir']}, 'POS': 'VERB'},
-
-    # Préposition de départ (optionnelle)
-    {'LOWER': {'IN': ['de', 'depuis']}, 'OP': '?'},
-
-    # Ville de départ
-    {'ENT_TYPE': 'LOC', 'OP': '+'},
-
-    # Préposition de destination
-    {'LOWER': {'IN': ['pour', 'afin de', 'vers']}, 'OP': '?'},
-
-    # Verbe de mouvement ou d'intention (optionnel)
-    {'LEMMA': {'IN': ['aller', 'rejoindre', 'rendre', 'visiter']}, 'OP': '*'},
-
-    # Préposition avant la ville d'arrivée (optionnelle)
-    {'LOWER': {'IN': ['à', 'vers']}, 'OP': '?'},
-
-    # Ville d'arrivée
-    {'ENT_TYPE': 'LOC', 'OP': '+'},
-
-    # Mots supplémentaires (optionnels)
-    {'OP': '*'},
-]
-
-matcher.add('TRIP_PATTERN', [pattern_trip])
 
 
 ########################################## map des communes aux gares depuis le csv sncf ###############
@@ -86,8 +54,6 @@ with open(sncf_dataset, 'r', encoding='utf-8') as sncf_file:
             commune_to_stations[commune] = {station_name}
 
 #################################################################################### fonctions ############################
-
-from spacy.matcher import Matcher
 
 def extraireLieux(phrase):
     doc = nlp(phrase)

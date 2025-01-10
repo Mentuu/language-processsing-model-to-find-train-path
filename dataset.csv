@@ -66,4 +66,4 @@ Sentence,Departure City,Arrival City,Trip Validity,Intermediate City
 "Je vais à Grenoble depuis Strasbourg en passant par Metz","Strasbourg","Grenoble","1","Metz"
 "Quelle est la météo à Tours aujourd'hui?","Tours","None","0","None"
 "Réserve un vol pour New York depuis Paris.","Paris","None","0","None"
-"Je prends le train de Paris à Bordeaux.","Paris","Bordeaux","1","None"
+"Je prends le train de SAINTE-COLOMBE-SUR-SEINE à Bordeaux.","SAINTE-COLOMBE-SUR-SEINE","Bordeaux","1","None"
