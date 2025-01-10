@@ -378,13 +378,14 @@ def replace_with_synonyms(sentence):
 
 # Fonction pour générer des phrases
 def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
+
     generated_data = []
     attempts = 0
-    max_attempts = nb_phrases * 10  # Pour éviter une boucle infinie
-    while len(generated_data) < nb_phrases and attempts < max_attempts:
-        attempts += 1
-        phrase_template = random.choice(phrases_list)
-        placeholders = re.findall(r'{(.*?)}', phrase_template)
+    max_attempts = nb_phrases * 10  # To avoid infinite loops
+    used_templates = set()
+
+    def generate_sentence(template):
+        placeholders = re.findall(r'{(.*?)}', template)
         data = {}
         transit_cities = 'None'
 
@@ -392,12 +393,12 @@ def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
             data['departure'] = random.choice(cities)
         if 'arrival' in placeholders:
             data['arrival'] = random.choice(cities)
-            # Éviter que la ville d'arrivée soit la même que celle de départ
+            # Ensure arrival city is not the same as departure city
             while 'departure' in data and data['arrival'] == data['departure']:
                 data['arrival'] = random.choice(cities)
         if 'transits' in placeholders:
             available_cities = [city for city in cities if city not in data.values()]
-            # Nombre aléatoire d'escales entre 1 et 3
+            # Random number of transits between 1 and 3
             n_transits = random.randint(1, 3)
             transit_cities_list = random.sample(available_cities, k=n_transits)
             transit_cities = ', '.join(transit_cities_list)
@@ -415,21 +416,44 @@ def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
             data['city'] = random.choice(cities)
 
         try:
-            sentence = phrase_template.format(**data)
-            # Remplacer les mots par des synonymes
+            sentence = template.format(**data)
+            # Replace words with synonyms (if implemented)
             sentence = replace_with_synonyms(sentence)
-        except KeyError as e:
-            continue
+        except KeyError:
+            return None, None
 
-        if sentence not in existing_sentences:
+        return sentence, data
+
+    # Ensure each template is used at least once
+    for template in phrases_list:
+        sentence, data = generate_sentence(template)
+        if sentence and sentence not in existing_sentences:
             existing_sentences.add(sentence)
             generated_data.append({
                 'Sentence': sentence,
                 'Departure City': data.get('departure', 'None'),
                 'Arrival City': data.get('arrival', 'None'),
-                'Transit Cities': transit_cities,
+                'Transit Cities': data.get('transits', 'None'),
                 'Is Trip': label
             })
+            used_templates.add(template)
+
+    # Generate additional sentences until reaching the desired count
+    while len(generated_data) < nb_phrases and attempts < max_attempts:
+        attempts += 1
+        template = random.choice(phrases_list)
+        sentence, data = generate_sentence(template)
+
+        if sentence and sentence not in existing_sentences:
+            existing_sentences.add(sentence)
+            generated_data.append({
+                'Sentence': sentence,
+                'Departure City': data.get('departure', 'None'),
+                'Arrival City': data.get('arrival', 'None'),
+                'Transit Cities': data.get('transits', 'None'),
+                'Is Trip': label
+            })
+            used_templates.add(template)
 
     return generated_data
 
