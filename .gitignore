@@ -1,0 +1,6 @@
+/results
+/trained_model
+/__pycache__
+/target
+phrases.csv
+test_phrases.csv
