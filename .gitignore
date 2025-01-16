@@ -4,3 +4,4 @@
 /target
 phrases.csv
 test_phrases.csv
+/custom_spacy_model
