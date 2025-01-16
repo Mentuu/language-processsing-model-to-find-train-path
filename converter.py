@@ -15,7 +15,9 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 model = model.to(device)
 
 spacy.prefer_gpu()
-nlp = spacy.load('custom_model')
+nlp = spacy.load('custom_spacy_model')#model custom
+# nlp = spacy.load('fr_core_news_lg')#model fr_core_news_lg
+
 dataset = 'dataset.csv'
 sncf_dataset = 'liste-des-gares.csv'
 
@@ -72,28 +74,32 @@ def extraireLieux(phrase):
     # Pattern B: "je suis|je me trouve|je suis actuellement à <LOC>"
     #  - We'll allow optional words in between, e.g. "je suis actuellement à"
     dep_pattern_b = [
-        {"LOWER": {"IN": ["je"]}, "OP": "?"},
-        {"LEMMA": {"IN": ["être", "se_trouver"]}, "OP": "+"},  # "suis", "me trouve"
+        {"LEMMA": {"IN": ["être"]}},
         {"LOWER": {"IN": ["actuellement"]}, "OP": "*"},
-        {"LOWER": {"IN": ["à", "au", "en"]}, "OP": "+"},
+        {"LOWER": {"IN": ["à", "au", "en"]}},
         {"ENT_TYPE": {"IN": ["LOC", "GPE"]}, "OP": "+"}
     ]
 
     dep_pattern_c = [
-        {"LEMMA": {"IN": ["partir", "voyager"]}, "OP": "+"},
-        {"OP": "*"},
-        {"LOWER": {"IN": ["de", "depuis"]}, "OP": "+"},
+        {"LOWER": {"REGEX": r"^(me|se)$"}},
+        {"LEMMA": {"IN": ["trouver"]}},
+        {"LOWER": {"IN": ["à"]}},
         {"ENT_TYPE": {"IN": ["LOC", "GPE"]}, "OP": "+"}
     ]
 
     dep_pattern_d = [
-        {"LEMMA": {"IN": ["quitter"]}, "OP": "+"},
-        {"OP": "*"},    
+        {"LEMMA": {"IN": ["partir", "voyager"]}},
+        {"LOWER": {"IN": ["de", "depuis"]}},
+        {"ENT_TYPE": {"IN": ["LOC", "GPE"]}, "OP": "+"}
+    ]
+
+    dep_pattern_e = [
+        {"LEMMA": {"IN": ["quitter"]}},
         {"ENT_TYPE": {"IN": ["LOC", "GPE"]}, "OP": "+"}
     ]
 
     # Add them to the departure_matcher
-    departure_matcher.add("DEPARTURE_PATTERN", [dep_pattern_a, dep_pattern_b, dep_pattern_c, dep_pattern_d])
+    departure_matcher.add("DEPARTURE_PATTERN", [dep_pattern_b, dep_pattern_c, dep_pattern_a, dep_pattern_e, dep_pattern_d])
 
     # --- 3) Define multiple patterns for arrival
     # Pattern A: "aller|rendre|rejoindre|vouloir + à|pour|vers|en + <LOC>"
@@ -215,55 +221,49 @@ def is_banned_vehicle(phrase):
     return 0
 
 
-def processPhrases(datasetToProcess):
-    with open(datasetToProcess, 'r', encoding='utf-8') as csvfile:
-        csvreader = csv.DictReader(csvfile)
+def processPhrases(phrase):
 
-        for row in csvreader:
-            phrase = row['Sentence']
-            ville_depart_attendue_raw = row['Departure City'].strip()
-            ville_arrivee_attendue_raw = row['Arrival City'].strip()
-            ville_intermediaire_attendue_raw = row['Intermediate City'].strip()
-            validite_attendue = row['Trip Validity'].strip()
-            
-            ville_depart_attendue = fct_utils.normalize_str(ville_depart_attendue_raw)
-            ville_arrivee_attendue = fct_utils.normalize_str(ville_arrivee_attendue_raw)
-            ville_intermediaire_attendue = fct_utils.normalize_str(ville_intermediaire_attendue_raw)
+    ville_depart_attendue_raw = row['Departure City'].strip()
+    ville_arrivee_attendue_raw = row['Arrival City'].strip()
+    ville_intermediaire_attendue_raw = row['Intermediate City'].strip()
+    validite_attendue = row['Trip Validity'].strip()
+    
+    ville_depart_attendue = fct_utils.normalize_str(ville_depart_attendue_raw)
+    ville_arrivee_attendue = fct_utils.normalize_str(ville_arrivee_attendue_raw)
+    ville_intermediaire_attendue = fct_utils.normalize_str(ville_intermediaire_attendue_raw)
 
-            if (estTrajet(phrase) == "0" and validite_attendue == "1") or (validite_attendue == "0" and estTrajet(phrase) == "0"):
-                print(f"Phrase: {phrase} is a INVALID trip, [NOT A TRIP], validité attendue: {validite_attendue}\n")
-                continue    
-            if is_banned_vehicle(phrase) == 1:
-                continue
+    if (estTrajet(phrase) == "0" and validite_attendue == "1") or (validite_attendue == "0" and estTrajet(phrase) == "0"):
+        print(f"Phrase: {phrase} is a INVALID trip, [NOT A TRIP], validité attendue: {validite_attendue}\n")
+        return    
+    if is_banned_vehicle(phrase) == 1:
+        return
 
-            verbe, lieu_depart_raw, lieu_arrivee_raw, lieux_intermediaires_raw = extraireLieux(phrase)
-            lieu_depart = fct_utils.normalize_str(lieu_depart_raw) if lieu_depart_raw else None
-            lieu_arrivee = fct_utils.normalize_str(lieu_arrivee_raw) if lieu_arrivee_raw else None
-            lieux_intermediaires = [fct_utils.normalize_str(city) for city in lieux_intermediaires_raw] if lieux_intermediaires_raw else []
-            if lieu_depart and lieu_depart in communes_set:
-                departure_stations = commune_to_stations[lieu_depart]
-            else:
-                if validite_attendue == "1":
-                    print(f"lieu_depart: {lieu_depart}")
-                    print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE], validité attendu: {validite_attendue}\n")
-                lieu_depart = None
-                departure_stations = None
-                continue
-            if lieu_arrivee and lieu_arrivee in communes_set:
-                arrival_stations = commune_to_stations[lieu_arrivee]
-            else:
-                if validite_attendue == "1":
-                    print(f"lieu_arrivee: {lieu_arrivee}")
-                    print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]: {validite_attendue}\n")
-                arrival_stations = None
-                lieu_arrivee = None
-                continue
+    verbe, lieu_depart_raw, lieu_arrivee_raw, lieux_intermediaires_raw = extraireLieux(phrase)
+    lieu_depart = fct_utils.normalize_str(lieu_depart_raw) if lieu_depart_raw else None
+    lieu_arrivee = fct_utils.normalize_str(lieu_arrivee_raw) if lieu_arrivee_raw else None
+    lieux_intermediaires = [fct_utils.normalize_str(city) for city in lieux_intermediaires_raw] if lieux_intermediaires_raw else []
+    if lieu_depart and lieu_depart in communes_set:
+        departure_stations = commune_to_stations[lieu_depart]
+    else:
+        if validite_attendue == "1":
+            print(f"lieu_depart: {lieu_depart}")
+            print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE], validité attendu: {validite_attendue}\n")
+        lieu_depart = None
+        departure_stations = None
+        return
+    if lieu_arrivee and lieu_arrivee in communes_set:
+        arrival_stations = commune_to_stations[lieu_arrivee]
+    else:
+        if validite_attendue == "1":
+            print(f"lieu_arrivee: {lieu_arrivee}")
+            print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]: {validite_attendue}\n")
+        arrival_stations = None
+        lieu_arrivee = None
+        return
 
-            print(f"Phrase: {phrase} is a VALID trip, validité attendue: {validite_attendue}")
-            print(f"Ville de départ: {lieu_depart}, Ville de départ attendue: {ville_depart_attendue}")
-            print(f"Ville d'arrivée: {lieu_arrivee}, Ville d'arrivée attendue: {ville_arrivee_attendue}")
-            print(f"Villes intermédiaires: {lieux_intermediaires}, Ville intermédiaire attendue: {ville_intermediaire_attendue}\n")
-            print(f"//////////////////////////////////////////////////////////////////////////////////////////////////////////////\n")
-
-# print("COMMUNES SET",communes_set)
-processPhrases(dataset)
+    print(f"Phrase: {phrase} is a VALID trip, validité attendue: {validite_attendue}")
+    print(f"Ville de départ: {lieu_depart}, Ville de départ attendue: {ville_depart_attendue}")
+    print(f"Ville d'arrivée: {lieu_arrivee}, Ville d'arrivée attendue: {ville_arrivee_attendue}")
+    print(f"Villes intermédiaires: {lieux_intermediaires}, Ville intermédiaire attendue: {ville_intermediaire_attendue}\n")
+    print(f"//////////////////////////////////////////////////////////////////////////////////////////////////////////////\n")
+    return lieu_depart, lieu_arrivee, lieux_intermediaires, departure_stations, arrival_stations
