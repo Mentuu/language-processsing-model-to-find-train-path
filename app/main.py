@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 from RecordTranscribe import transcribe_and_analyze
+from Converter.converter import processPhrases
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
@@ -46,7 +47,8 @@ def trips():
     # Si un message JSON est envoyé
     if message:
         # Ajoutez ici votre logique pour traiter le message
-        processed_message = f"Message reçu : {message}"  # Exemple de réponse
+        processed_message = processPhrases(message)
+
         return jsonify({"message": processed_message})
 
     # Retournez une erreur générique (ce cas ne devrait pas arriver)
