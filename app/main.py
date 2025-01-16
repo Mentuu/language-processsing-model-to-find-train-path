@@ -72,7 +72,7 @@ def trips():
         )
 
         if path_names is None:
-            return jsonify({"error": "Aucun itinéraire trouvé."}), 404
+            return jsonify({"error": "Aucun itinéraire trouvé."}), 200
 
         return jsonify({
             "itineraire": " -> ".join(path_names),
@@ -80,7 +80,7 @@ def trips():
             "next_dep_time": next_dep_time
         })
     else:
-        return jsonify({"error": "Invalid trip"}), 400
+        return jsonify({"error": "Je n'ai pas compris votre message, veuillez réessayer."}), 200
     
 
 if __name__ == '__main__':

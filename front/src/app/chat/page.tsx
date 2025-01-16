@@ -12,11 +12,28 @@ import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
 import SendIcon from "@mui/icons-material/Send";
 import AudiotrackIcon from "@mui/icons-material/Audiotrack";
+import TrainIcon from "@mui/icons-material/Train";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
 export default function Chat() {
   const [messages, setMessages] = useState<
-    { sender: "user" | "api"; text?: string; audioUrl?: string }[]
-  >([]);
+    {
+      sender: "user" | "api";
+      itinéraire?: string;
+      audioUrl?: string;
+      arrayTrain: string[];
+      duree?: string;
+      next_dep_time?: string;
+      error?: boolean;
+    }[]
+  >([
+    {
+      sender: "api",
+      itinéraire:
+        "Bienvenue sur CityTrain ! Je suis là pour vous aider à trouver votre itinéraire en train.",
+      arrayTrain: [],
+    },
+  ]);
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false); // State for loading
@@ -41,7 +58,10 @@ export default function Chat() {
 
         const audioUrl = URL.createObjectURL(audioBlob);
 
-        setMessages((prev) => [...prev, { sender: "user", audioUrl }]);
+        setMessages((prev) => [
+          ...prev,
+          { sender: "user", audioUrl, arrayTrain: [] },
+        ]);
 
         // Prepare FormData
         const formData = new FormData();
@@ -60,9 +80,36 @@ export default function Chat() {
 
           const data = await response.json();
 
-          console.log("API response:", data);
+          if (data.error) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                sender: "api",
+                itinéraire: data.error,
+                arrayTrain: [],
+                error: true,
+              },
+            ]);
 
-          setMessages((prev) => [...prev, { sender: "api", text: data.text }]);
+            setLoading(false); // End loading
+            return;
+          }
+
+          if (data.itinéraire) {
+            // Séparer les villes pour un affichage plus propre
+            const villes = data.itineraire.split(" -> ");
+
+            setMessages((prev) => [
+              ...prev,
+              {
+                sender: "api",
+                itinéraire: data.itinéraire,
+                arrayTrain: villes,
+                duree: data.duree,
+                next_dep_time: data.next_dep_time,
+              },
+            ]);
+          }
         } catch (error) {
           console.error("Error sending audio:", error);
         } finally {
@@ -87,21 +134,70 @@ export default function Chat() {
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (loading || !input.trim()) return; // Prevent actions while loading or empty input
 
-    setMessages((prev) => [...prev, { sender: "user", text: input.trim() }]);
-    setInput("");
+    setMessages((prev) => [
+      ...prev,
+      { sender: "user", itinéraire: input.trim(), arrayTrain: [] },
+    ]);
 
+    setInput("");
     setLoading(true); // Start loading
 
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        { sender: "api", text: `Response to: "${input}"` },
-      ]);
-      setLoading(false); // End loading
-    }, 2000); // Simulate API delay
+    try {
+      const result = await fetch("http://127.0.0.1:5000/trips", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: input.trim() }),
+      });
+
+      if (!result.ok) {
+        throw new Error("Failed to send message");
+      }
+
+      const data = await result.json();
+      console.log("API response:", data);
+
+      if (data.error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: "api",
+            itinéraire: data.error,
+            arrayTrain: [],
+            error: true,
+          },
+        ]);
+
+        setLoading(false); // End loading
+        return;
+      }
+
+      if (data && data.itineraire) {
+        // Séparer les villes pour un affichage plus propre
+        const villes = data.itineraire.split(" -> ");
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: "api",
+            itinéraire: data.itinéraire,
+            arrayTrain: villes,
+            duree: data.duree,
+            next_dep_time: data.next_dep_time,
+          },
+        ]);
+      }
+
+      setLoading(false); // Start loading
+    } catch (error) {
+      console.error("Error sending message:", error);
+
+      setLoading(false);
+    }
   };
 
   return (
@@ -133,6 +229,7 @@ export default function Chat() {
               marginBottom: "20px",
             }}
           >
+            {/* Si un audio est présent */}
             {message.audioUrl ? (
               <Box
                 sx={{
@@ -153,18 +250,83 @@ export default function Chat() {
                   onError={() => console.error("Audio playback error")}
                 />
               </Box>
+            ) : message.sender === "api" && message.arrayTrain?.length > 0 ? (
+              <Box
+                sx={{
+                  backgroundColor: "#f5f5f5",
+                  color: "#333",
+                  padding: "15px",
+                  borderRadius: "10px",
+                  boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                  textAlign: "left",
+                  fontSize: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  <TrainIcon sx={{ color: "#1e88e5", fontSize: "24px" }} />
+                  <Typography component="span">
+                    <strong>Départ :</strong>{" "}
+                    {message.arrayTrain[0] || "Inconnu"}
+                  </Typography>
+                </Box>
+
+                {message.arrayTrain.length > 2 && (
+                  <Box
+                    sx={{ display: "flex", alignItems: "center", gap: "10px" }}
+                  >
+                    <ArrowForwardIcon
+                      sx={{ color: "#757575", fontSize: "18px" }}
+                    />
+                    <Typography component="span">
+                      {message.arrayTrain
+                        .slice(1, message.arrayTrain.length - 1)
+                        .join(" → ") || "Aucune escale"}
+                    </Typography>
+                  </Box>
+                )}
+
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  <TrainIcon sx={{ color: "#d32f2f", fontSize: "24px" }} />
+                  <Typography component="span">
+                    <strong>Arrivée :</strong>{" "}
+                    {message.arrayTrain[message.arrayTrain.length - 1] ||
+                      "Inconnu"}
+                  </Typography>
+                </Box>
+
+                {/* Durée et prochain départ */}
+                <Box sx={{ marginTop: "10px" }}>
+                  <strong>Durée :</strong> {message.duree || "Non spécifiée"}
+                </Box>
+                <Box>
+                  <strong>Prochain départ :</strong>{" "}
+                  {message.next_dep_time || "Non spécifié"}
+                </Box>
+              </Box>
             ) : (
+              /* Message par défaut */
               <Typography
                 sx={{
                   backgroundColor:
-                    message.sender === "user" ? "#1e88e5" : "#424242",
+                    message.sender === "user"
+                      ? "#1e88e5"
+                      : message.error
+                      ? "red"
+                      : "#424242",
                   color: "#fff",
                   padding: "10px 15px",
                   borderRadius: "15px",
                   maxWidth: "70%",
                 }}
               >
-                {message.text}
+                {message.itinéraire || "Message vide"}
               </Typography>
             )}
           </Box>
