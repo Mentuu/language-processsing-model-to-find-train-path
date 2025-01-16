@@ -235,19 +235,10 @@ def is_banned_vehicle(phrase):
 
 
 def processPhrases(phrase):
-
-    ville_depart_attendue_raw = row['Departure City'].strip()
-    ville_arrivee_attendue_raw = row['Arrival City'].strip()
-    ville_intermediaire_attendue_raw = row['Intermediate City'].strip()
-    validite_attendue = row['Trip Validity'].strip()
     
-    ville_depart_attendue = fct_utils.normalize_str(ville_depart_attendue_raw)
-    ville_arrivee_attendue = fct_utils.normalize_str(ville_arrivee_attendue_raw)
-    ville_intermediaire_attendue = fct_utils.normalize_str(ville_intermediaire_attendue_raw)
-
-    if (estTrajet(phrase) == "0" and validite_attendue == "1") or (validite_attendue == "0" and estTrajet(phrase) == "0"):
-        print(f"Phrase: {phrase} is a INVALID trip, [NOT A TRIP], validité attendue: {validite_attendue}\n")
-        return    
+    if (estTrajet(phrase) == "0"):
+        print(f"Phrase: {phrase} is a INVALID trip, [NOT A TRIP]\n")
+        return 
     if is_banned_vehicle(phrase) == 1:
         return
 
@@ -258,25 +249,23 @@ def processPhrases(phrase):
     if lieu_depart and lieu_depart in communes_set:
         departure_stations = commune_to_stations[lieu_depart]
     else:
-        if validite_attendue == "1":
-            print(f"lieu_depart: {lieu_depart}")
-            print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE], validité attendu: {validite_attendue}\n")
+        print(f"lieu_depart: {lieu_depart}")
+        print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]\n")
         lieu_depart = None
         departure_stations = None
         return
     if lieu_arrivee and lieu_arrivee in communes_set:
         arrival_stations = commune_to_stations[lieu_arrivee]
     else:
-        if validite_attendue == "1":
-            print(f"lieu_arrivee: {lieu_arrivee}")
-            print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]: {validite_attendue}\n")
+        print(f"lieu_arrivee: {lieu_arrivee}")
+        print(f"Phrase: {phrase} is a INVALID trip, [VILLE NON FRANCAISE]\n")
         arrival_stations = None
         lieu_arrivee = None
         return
 
-    print(f"Phrase: {phrase} is a VALID trip, validité attendue: {validite_attendue}")
-    print(f"Ville de départ: {lieu_depart}, Ville de départ attendue: {ville_depart_attendue}")
-    print(f"Ville d'arrivée: {lieu_arrivee}, Ville d'arrivée attendue: {ville_arrivee_attendue}")
-    print(f"Villes intermédiaires: {lieux_intermediaires}, Ville intermédiaire attendue: {ville_intermediaire_attendue}\n")
+    print(f"Phrase: {phrase} is a VALID trip")
+    print(f"Ville de départ: {lieu_depart}")
+    print(f"Ville d'arrivée: {lieu_arrivee}")
+    print(f"Villes intermédiaires: {lieux_intermediaires}\n")
     print(f"//////////////////////////////////////////////////////////////////////////////////////////////////////////////\n")
     return lieu_depart, lieu_arrivee, lieux_intermediaires, departure_stations, arrival_stations

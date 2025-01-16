@@ -3,6 +3,8 @@ from flask_cors import CORS
 import os
 from RecordTranscribe import transcribe_and_analyze
 from Converter.converter import processPhrases
+from itinéraireTrain import itineraireTrain
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
@@ -14,6 +16,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.route('/trips', methods=['POST'])
 def trips():
+    transcriptionMessage = ""
     # Vérifiez si le contenu est JSON
     if request.is_json:
         data = request.get_json()
@@ -37,23 +40,48 @@ def trips():
         try:
             # Appelez la fonction de transcription et d'analyse depuis RecordTranscribe.py
             result = transcribe_and_analyze(temp_filename)
+            transcriptionMessage = result["transcription"]  
+
         finally:
             # Supprimez le fichier temporaire après traitement
             if os.path.exists(temp_filename):
                 os.remove(temp_filename)
 
-        return jsonify(result)
-
-    # Si un message JSON est envoyé
     if message:
-        # Ajoutez ici votre logique pour traiter le message
-        processed_message = processPhrases(message)
+        transcriptionMessage = message
 
-        return jsonify({"message": processed_message})
+    processed_message = processPhrases(transcriptionMessage)
+   
 
-    # Retournez une erreur générique (ce cas ne devrait pas arriver)
-    return jsonify({"error": "Unexpected error"}), 500
+    if processed_message is not None:
+        
+        lieu_depart, lieu_arrivee, lieux_intermediaires, departure_stations, arrival_stations = processed_message
+    
+        # Paramètres par défaut ou récupérés depuis les paramètres de requête
+        stops_filename = os.path.join(os.path.dirname(__file__), '../dataSncf/stops.txt')
+        stop_times_filename = os.path.join(os.path.dirname(__file__), '../dataSncf/stop_times.txt')
 
+
+        # 1) Calcul de l'itinéraire le plus rapide (simple)
+        path_names, duree_str, next_dep_time  = itineraireTrain(
+            stops_filename, 
+            stop_times_filename, 
+            lieu_depart.lower(), 
+            lieu_arrivee.lower(),
+            lieux_intermediaires
+        )
+
+        if path_names is None:
+            return jsonify({"error": "Aucun itinéraire trouvé."}), 404
+
+        return jsonify({
+            "itineraire": " -> ".join(path_names),
+            "duree": duree_str,
+            "next_dep_time": next_dep_time
+        })
+    else:
+        return jsonify({"error": "Invalid trip"}), 400
+    
 
 if __name__ == '__main__':
     app.run(debug=True)
