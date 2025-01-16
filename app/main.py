@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import os
 from RecordTranscribe import transcribe_and_analyze
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
+
 
 # Configuration des fichiers temporaires
 UPLOAD_FOLDER = './uploads'
