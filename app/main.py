@@ -4,6 +4,7 @@ import os
 from RecordTranscribe import transcribe_and_analyze
 from Converter.converter import processPhrases
 from itinéraireTrain import itineraireTrain
+from datetime import datetime, timedelta
 
 
 app = Flask(__name__)
@@ -61,6 +62,10 @@ def trips():
         stops_filename = os.path.join(os.path.dirname(__file__), '../dataSncf/stops.txt')
         stop_times_filename = os.path.join(os.path.dirname(__file__), '../dataSncf/stop_times.txt')
 
+         # Date et heure actuelles
+        now = datetime.now()
+        current_date = now.date()
+        current_time_sec = now.hour * 3600 + now.minute * 60 + now.second
 
         # 1) Calcul de l'itinéraire le plus rapide (simple)
         path_names, duree_str, next_dep_time  = itineraireTrain(
@@ -68,6 +73,8 @@ def trips():
             stop_times_filename, 
             lieu_depart.lower(), 
             lieu_arrivee.lower(),
+            current_date,
+            current_time_sec,
             lieux_intermediaires
         )
 
