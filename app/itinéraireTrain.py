@@ -132,34 +132,81 @@ def dijkstra(graph, start_stop_id, goal_stop_id):
 
     return None, float('inf')
 
-def prochain_depart(stop_times_filename, stop_id, current_time_sec):
+
+def extract_date_from_trip_id(trip_id):
     """
-    Recherche le prochain départ depuis `stop_id` après `current_time_sec`.
+    Extrait la date d'un `trip_id` au format : "OCESN831716F3524380:2025-01-17T00:20:49Z".
+    Retourne une date (datetime.date) ou None si le format est incorrect.
+    """
+    try:
+        date_str = trip_id.split(":")[1].split("T")[0]
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+    except (IndexError, ValueError):
+        return None
+
+
+def prochain_depart(stop_times_filename, stop_id, current_date, current_time_sec):
+    """
+    Recherche le prochain départ depuis `stop_id` après `current_date` et `current_time_sec`,
+    en prenant en compte le plus petit `stop_sequence` en cas d'égalité des horaires.
+
+    Arguments :
+    - stop_times_filename : chemin vers le fichier CSV `stop_times`.
+    - stop_id : l'identifiant de l'arrêt.
+    - current_date : la date actuelle (datetime.date).
+    - current_time_sec : l'heure actuelle en secondes depuis minuit.
+
+    Retourne :
+    - Un dictionnaire contenant les informations du prochain départ.
     """
     prochain_horaire = None
     prochain_depart = None
-    prev_departure_time = 0
+    prochain_stop_sequence = None
 
     with open(stop_times_filename, mode='r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row['stop_id'] == stop_id:
-                if row['pickup_type'] == 1 and row['drop_off_type'] == 1:
+                # Extraire la date du trip_id
+                trip_date = extract_date_from_trip_id(row['trip_id'])
+                if trip_date is None or trip_date < current_date:
                     continue
-                  # Vérification des horaires
-                if row['arrival_time'] is None or row['departure_time'] is None:
+
+                # Vérifier si l'arrêt est valide pour embarquer/débarquer
+                if row.get('pickup_type') == '1' and row.get('drop_off_type') == '1':
                     continue
-                if row['departure_time'] < row['arrival_time']:
+
+                # Vérifier la validité des horaires
+                if not row.get('arrival_time') or not row.get('departure_time'):
                     continue
+
+                # Convertir l'heure de départ en secondes depuis minuit
                 dep_sec = parse_time(row['departure_time'])
-                if dep_sec and dep_sec >= current_time_sec:  # Prochain horaire après l'heure actuelle
-                    if prochain_horaire is None or dep_sec < prochain_horaire:
-                        prochain_horaire = dep_sec
-                        prochain_depart = row
+
+                # Si la date est celle d'aujourd'hui, vérifier l'heure
+                if trip_date == current_date and (dep_sec is None or dep_sec < current_time_sec):
+                    continue
+
+                # Convertir le `stop_sequence` en entier
+                stop_sequence = int(row['stop_sequence'])
+
+                # Rechercher le prochain horaire
+                if (
+                    prochain_horaire is None
+                    or (trip_date == current_date and dep_sec < prochain_horaire)
+                    or (
+                        dep_sec == prochain_horaire and stop_sequence < prochain_stop_sequence
+                    )
+                ):  
+                    prochain_horaire = dep_sec
+                    prochain_depart = row
+                    prochain_stop_sequence = stop_sequence
 
     return prochain_depart
 
-def itineraireTrain(stops_filename, stop_times_filename, departure_name, arrival_name, intermediate_names=None):
+
+def itineraireTrain(stops_filename, stop_times_filename, departure_name, arrival_name, current_date, 
+        current_time_sec, intermediate_names=None):
     """
     Renvoie (path_names, duree_str, prochain_depart_time) pour l'itinéraire le plus rapide
     à partir de maintenant entre departure_name et arrival_name, en passant par des villes intermédiaires.
@@ -191,10 +238,6 @@ def itineraireTrain(stops_filename, stop_times_filename, departure_name, arrival
         print("Une ou plusieurs gares intermédiaires sont introuvables.")
         return None, None, None
 
-    # Heure actuelle (en secondes depuis minuit)
-    now = datetime.now()
-    current_time_sec = now.hour * 3600 + now.minute * 60 + now.second
-
     # Lecture de stop_times pour reconstruire le graphe
     trip_stop_map = read_stop_times(stop_times_filename)
     graph = build_graph_with_duration(trip_stop_map)
@@ -217,7 +260,7 @@ def itineraireTrain(stops_filename, stop_times_filename, departure_name, arrival
             for end_id in end_ids:
                 # Trouver le prochain départ
                 print(start_id)
-                departure_info = prochain_depart(stop_times_filename, start_id, current_time_sec)
+                departure_info = prochain_depart(stop_times_filename, start_id, current_date, current_time_sec)
 
 
                 if not departure_info:
@@ -262,8 +305,14 @@ def main():
     stop_times_filename = os.path.join(os.path.dirname(__file__), '../dataSncf/stop_times.txt')
 
     departure_name = "Strasbourg"
-    arrival_name = "Mulhouse"
+    arrival_name = "Saverne"
     intermediate_names = []
+
+
+    # Date et heure actuelles
+    now = datetime.now()
+    current_date = now.date()
+    current_time_sec = now.hour * 3600 + now.minute * 60 + now.second
 
     # 1) Calcul de l'itinéraire le plus rapide (simple)
     path_names, duree_str, next_dep_time  = itineraireTrain(
@@ -271,6 +320,8 @@ def main():
         stop_times_filename, 
         departure_name, 
         arrival_name,
+        current_date, 
+        current_time_sec,
         intermediate_names
     )
 
