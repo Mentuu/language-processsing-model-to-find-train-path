@@ -95,7 +95,7 @@ export default function Chat() {
             return;
           }
 
-          if (data.itinéraire) {
+          if (data && data.itineraire) {
             // Séparer les villes pour un affichage plus propre
             const villes = data.itineraire.split(" -> ");
 
@@ -159,7 +159,6 @@ export default function Chat() {
       }
 
       const data = await result.json();
-      console.log("API response:", data);
 
       if (data.error) {
         setMessages((prev) => [
@@ -250,7 +249,9 @@ export default function Chat() {
                   onError={() => console.error("Audio playback error")}
                 />
               </Box>
-            ) : message.sender === "api" && message.arrayTrain?.length > 0 ? (
+            ) : null}
+
+            {message.sender === "api" && message.arrayTrain?.length > 0 ? (
               <Box
                 sx={{
                   backgroundColor: "#f5f5f5",
@@ -271,7 +272,7 @@ export default function Chat() {
                   <TrainIcon sx={{ color: "#1e88e5", fontSize: "24px" }} />
                   <Typography component="span">
                     <strong>Départ :</strong>{" "}
-                    {message.arrayTrain[0] || "Inconnu"}
+                    {message.arrayTrain[0].toUpperCase() || "Inconnu"}
                   </Typography>
                 </Box>
 
@@ -296,8 +297,9 @@ export default function Chat() {
                   <TrainIcon sx={{ color: "#d32f2f", fontSize: "24px" }} />
                   <Typography component="span">
                     <strong>Arrivée :</strong>{" "}
-                    {message.arrayTrain[message.arrayTrain.length - 1] ||
-                      "Inconnu"}
+                    {message.arrayTrain[
+                      message.arrayTrain.length - 1
+                    ].toUpperCase() || "Inconnu"}
                   </Typography>
                 </Box>
 
@@ -310,7 +312,9 @@ export default function Chat() {
                   {message.next_dep_time || "Non spécifié"}
                 </Box>
               </Box>
-            ) : (
+            ) : null}
+
+            {!message.audioUrl && message.arrayTrain.length === 0 ? (
               /* Message par défaut */
               <Typography
                 sx={{
@@ -328,7 +332,7 @@ export default function Chat() {
               >
                 {message.itinéraire || "Message vide"}
               </Typography>
-            )}
+            ) : null}
           </Box>
         ))}
 
