@@ -17,7 +17,7 @@ import numpy as np
 import platform
 import os
 
-# Check if the OS is macOS
+# Check OS
 if platform.system() == "Darwin":
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     print("Disabled tokenizers parallelism for macOS.")
@@ -41,10 +41,8 @@ def compute_metrics(pred):
     labels = pred.label_ids
     preds = pred.predictions.argmax(-1)
 
-    # Calculer l'accuracy
     acc = accuracy_score(labels, preds)
 
-    # Calculer la précision, le rappel et le F1-score
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels, preds, average='binary'
     )
@@ -56,7 +54,6 @@ def compute_metrics(pred):
         'f1': f1,
     }
 
-# Charger le tokenizer
 tokenizer = AutoTokenizer.from_pretrained('camembert-base')
 
 # Classe pour créer un dataset compatible avec PyTorch

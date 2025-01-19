@@ -1,0 +1,13 @@
+spacy
+transformers
+torch
+pandas
+numpy
+scikit-learn
+json5
+flask
+flask-restful
+pytest
+jupyter
+ipython
+matplotlib

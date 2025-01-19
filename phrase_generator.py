@@ -7,18 +7,15 @@ import os
 nb_phrases = 20000
 nb_phrases_test = 2500
 
-# Supprimer les fichiers existants
 if os.path.exists("phrases.csv"):
     os.remove("phrases.csv")
 if os.path.exists("test_phrases.csv"):
     os.remove("test_phrases.csv")
 
-# Importer les villes françaises depuis le fichier JSON
 with open('cities.json') as f:
     file = json.load(f)
     cities = [city['COMMUNE'] for city in file]
 
-# Ajouter les villes internationales à la liste des villes
 international_cities = [
     'New York', 'Tokyo', 'Berlin', 'Amsterdam', 'Bruxelles', 'Genève', 'Lisbonne',
     'Madrid', 'Rome', 'Prague', 'Vienne', 'Copenhague', 'Oslo', 'Stockholm',
@@ -26,11 +23,11 @@ international_cities = [
 ]
 cities.extend(international_cities)
 
-# Définir les modes de transport et les temps
+# Les modes de transport et les temps
 modes = ['en train', 'en voiture', 'en bus', 'en avion', 'en bateau', 'à pied', 'à vélo', 'en métro']
 times = ['demain matin', 'cet après-midi', 'ce soir', 'la semaine prochaine', 'aujourd\'hui']
 
-# Définir un dictionnaire de synonymes étendu pour diversifier les phrases
+# Dictionnaire de synonymes étendu pour diversifier les phrases
 synonyms = {
     'aller': ['se rendre', 'partir pour', 'visiter', 'rejoindre'],
     'partir': ['quitter', 'démarrer de', 's\'éloigner de', 'se diriger depuis'],
@@ -376,12 +373,11 @@ def replace_with_synonyms(sentence):
         new_sentence.append(new_word + punctuation)
     return ' '.join(new_sentence)
 
-# Fonction pour générer des phrases
 def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
 
     generated_data = []
     attempts = 0
-    max_attempts = nb_phrases * 10  # To avoid infinite loops
+    max_attempts = nb_phrases * 10  
     used_templates = set()
 
     def generate_sentence(template):
@@ -393,12 +389,10 @@ def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
             data['departure'] = random.choice(cities)
         if 'arrival' in placeholders:
             data['arrival'] = random.choice(cities)
-            # Ensure arrival city is not the same as departure city
             while 'departure' in data and data['arrival'] == data['departure']:
                 data['arrival'] = random.choice(cities)
         if 'transits' in placeholders:
             available_cities = [city for city in cities if city not in data.values()]
-            # Random number of transits between 1 and 3
             n_transits = random.randint(1, 3)
             transit_cities_list = random.sample(available_cities, k=n_transits)
             transit_cities = ', '.join(transit_cities_list)
@@ -417,14 +411,12 @@ def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
 
         try:
             sentence = template.format(**data)
-            # Replace words with synonyms (if implemented)
             sentence = replace_with_synonyms(sentence)
         except KeyError:
             return None, None
 
         return sentence, data
 
-    # Ensure each template is used at least once
     for template in phrases_list:
         sentence, data = generate_sentence(template)
         if sentence and sentence not in existing_sentences:
@@ -438,7 +430,6 @@ def generate_phrases(phrases_list, label, nb_phrases, existing_sentences):
             })
             used_templates.add(template)
 
-    # Generate additional sentences until reaching the desired count
     while len(generated_data) < nb_phrases and attempts < max_attempts:
         attempts += 1
         template = random.choice(phrases_list)
