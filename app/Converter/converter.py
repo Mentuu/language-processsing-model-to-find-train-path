@@ -7,7 +7,9 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import os
 
-model_path = './target/fine-tuned-bert'
+current_script_path = os.path.abspath(__file__)
+current_dir = os.path.dirname(current_script_path)
+model_path = os.path.join(current_dir, 'target', 'fine-tuned-bert')
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 model = AutoModelForSequenceClassification.from_pretrained(model_path)
 
