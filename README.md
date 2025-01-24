@@ -78,7 +78,7 @@ Entraînez le modèle BERT pour classer les phrases en fonction de leur validit�
 python train_bert.py
 ```
 
-### 3. Entraîner le modèle SpaCy
+### 3. Entraîner le modèle SpaCy(optionel)
 
 Le modèle SpaCy est utilisé pour extraire les entités nommées (villes de départ, d’arrivée, étapes intermédiaires).
 
@@ -93,7 +93,7 @@ Le modèle SpaCy est utilisé pour extraire les entités nommées (villes de dé
 
 ### 4. Utilisation du pipeline complet
 
-Lancez le pipeline complet pour traiter une phrase et extraire les informations.
+run le main.py et run l'application front après avoir installer les dépendance du front
 
 ```bash
 python main_pipeline.py --sentence "Je veux voyager de Paris à Lyon en passant par Dijon."
